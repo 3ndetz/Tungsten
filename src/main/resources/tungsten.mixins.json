@@ -18,7 +18,8 @@
     "MixinClientCommandSource",
     "AccessorChatInputSuggestor",
     "MixinChatInputSuggestor",
-    "MixinSuggestionWindow"
+    "MixinSuggestionWindow",
+    "MixinChatHud"
   ],
   "injectors": {
     "defaultRequire": 1

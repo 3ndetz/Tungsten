@@ -119,7 +119,7 @@ public class FollowPlayerTask {
             if (mode == Mode.STATIC) {
                 mode = Mode.DYNAMIC;
                 staticModePathStarted = false;
-                Debug.logMessage("Progress made, back to dynamic.");
+                TungstenMod.LOG.info("[FollowPlayer] Progress made, back to dynamic.");
             }
         }
 
@@ -144,7 +144,7 @@ public class FollowPlayerTask {
             TungstenModDataContainer.PATHFINDER.stop.set(true);
             TungstenModDataContainer.EXECUTOR.stop = true;
             stopRequested = false;
-            Debug.logMessage("No progress for 10s, switching to static pathfind...");
+            TungstenMod.LOG.info("[FollowPlayer] No progress for 10s, switching to static pathfind...");
         }
 
         if (mode == Mode.STATIC) {
@@ -213,7 +213,7 @@ public class FollowPlayerTask {
             lastProgressTime = System.currentTimeMillis();
             TungstenModDataContainer.PATHFINDER.stop.set(true);
             stopRequested = false;
-            Debug.logMessage("Target moving again, back to dynamic.");
+            TungstenMod.LOG.info("[FollowPlayer] Target moving again, back to dynamic.");
             return;
         }
 
@@ -242,7 +242,7 @@ public class FollowPlayerTask {
             staticModeTarget = targetPos.add(ox, 0, oz);
             staticModePathStarted = false;
             staticModeStartTime = System.currentTimeMillis();
-            Debug.logMessage("Static pathfind failed, retrying with offset (" + (int)ox + "," + (int)oz + ")...");
+            TungstenMod.LOG.info("[FollowPlayer] Static pathfind failed, retrying with offset (" + (int)ox + "," + (int)oz + ")...");
         }
     }
 
@@ -289,9 +289,9 @@ public class FollowPlayerTask {
         for (PlayerEntity p : mc.world.getPlayers()) {
             if (p.getName().getString().equalsIgnoreCase(targetName)) {
                 if (targetEntity == null) {
-                    Debug.logMessage("Found player: " + targetName);
+                    TungstenMod.LOG.info("[FollowPlayer] Found player: " + targetName);
                 } else {
-                    Debug.logMessage("Re-found player: " + targetName);
+                    TungstenMod.LOG.info("[FollowPlayer] Re-found player: " + targetName);
                 }
                 targetEntity = p;
                 // Reset no-progress timer when we re-find them
