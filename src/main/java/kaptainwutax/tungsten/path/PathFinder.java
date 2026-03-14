@@ -69,6 +69,13 @@ public class PathFinder {
 	protected static AtomicInteger NEXT_CLOSEST_BLOCKNODE_IDX = new AtomicInteger(1);
 	protected static AtomicInteger numNodesConsidered = new AtomicInteger(0);
 	
+	/** Max search time before emitting bestSoFar and continuing. Default: 112s (normal goto).
+	 *  Set lower (e.g. 2000) for follow-entity to get fast partial paths. */
+	public long searchTimeoutMs = 112000L;
+	/** Minimum path length (nodes) required before a timeout partial-path can be emitted.
+	 *  Default: 46 (~2.3s). Set lower (e.g. 5) for follow-entity close-range. */
+	public int minPathSizeForTimeout = 46;
+
 	private long startTime;
 	private Node start;
 
@@ -166,7 +173,7 @@ public class PathFinder {
 	    TungstenModRenderContainer.RENDERERS.clear();
 	
 	    long startTime = System.currentTimeMillis();
-	    long primaryTimeoutTime = startTime + 112000L;
+	    long primaryTimeoutTime = startTime + searchTimeoutMs;
 		numNodesConsidered.set(0);
 	    int timeCheckInterval = 1 << 3;
 	    double minVelocity = BlockStateChecker.isAnyWater(world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ()))) ? 0.2 :  0.07;
@@ -714,7 +721,13 @@ public class PathFinder {
         if (now < primaryTimeoutTime) return false;
         Optional<List<Node>> result = PathFinder.bestSoFar(true, 0, start, TungstenModDataContainer.PATHFINDER.TARGET);
 
-	      if (!result.isPresent() || result.get().size() < 46 || !(result.get().getLast().agent.onGround && result.get().getLast().agent.touchingWater) || result.get().getLast().agent.isClimbing(TungstenModDataContainer.world) || result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 3.5) {
+	      // Emit partial path if: result exists, long enough, last node is stable (on ground or in water),
+	      // not climbing (mid-climb is unsafe to cut), and path covers meaningful distance.
+	      // Bug fix: was (onGround && touchingWater) — nearly impossible, now (onGround || touchingWater).
+	      if (!result.isPresent() || result.get().size() < minPathSizeForTimeout
+	      		|| (!result.get().getLast().agent.onGround && !result.get().getLast().agent.touchingWater)
+	      		|| result.get().getLast().agent.isClimbing(TungstenModDataContainer.world)
+	      		|| result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 3.5) {
 	          return false;
 	      }
 //        if (player.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 1 && next.agent.getPos().distanceTo(target) > 1) {
