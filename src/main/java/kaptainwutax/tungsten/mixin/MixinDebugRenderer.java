@@ -40,8 +40,10 @@ import net.minecraft.client.render.Tessellator;
 		private static final int MAX_RENDERERS_PER_CATEGORY = 500;
 	
 		@Inject(method = "render", at = @At("RETURN"))
-		public void render(MatrixStack matrices, Frustum frustum, VertexConsumerProvider.Immediate vertexConsumers,
+		public void render(MatrixStack matrices, VertexConsumerProvider.Immediate vertexConsumers,
 				double cameraX, double cameraY, double cameraZ, CallbackInfo ci) {
+			// MC 1.21: Frustum removed from render() parameters
+			Frustum frustum = null;
 			
 			glDisable(GL_DEPTH_TEST);
 		    glDisable(GL_BLEND);
@@ -103,8 +105,8 @@ import net.minecraft.client.render.Tessellator;
 					}
 		
 					try {
-						// Skip rendering for objects outside the view frustum
-						if (r.getPos() != null) {
+						// Skip rendering for objects outside the view frustum (frustum may be null in MC 1.21)
+						if (frustum != null && r.getPos() != null) {
 							if (!frustum.isVisible(new Box(r.getPos().getX() - 3, r.getPos().getY() - 3, r.getPos().getZ() - 3,
 									r.getPos().getX() + 3, r.getPos().getY() + 3, r.getPos().getZ() + 3))) {
 								continue;
