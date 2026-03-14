@@ -67,6 +67,7 @@ public class TungstenMod implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		TungstenConfig.load();
 		TungstenModDataContainer.EXECUTOR = new PathExecutor(true);
 		pauseKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 	            "key.tungsten.pause", // The translation key of the keybinding's name

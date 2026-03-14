@@ -1,8 +1,11 @@
 package kaptainwutax.tungsten.commands;
 
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
+import kaptainwutax.tungsten.Debug;
+import kaptainwutax.tungsten.TungstenConfig;
 import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
 import kaptainwutax.tungsten.commandsystem.Command;
@@ -16,11 +19,29 @@ public class SettingsCommand extends Command {
 
 	@Override
 	public void build(LiteralArgumentBuilder<CommandSource> builder) {
-		
+
 		builder.then(argument("ignoreFallDamage", BoolArgumentType.bool()).executes(context -> {
-	        TungstenModDataContainer.ignoreFallDamage = BoolArgumentType.getBool(context, "ignoreFallDamage");
-			
+			TungstenModDataContainer.ignoreFallDamage = BoolArgumentType.getBool(context, "ignoreFallDamage");
+			TungstenConfig.save();
 			return SINGLE_SUCCESS;
 		}));
+
+		// ;settings driftCorrection true/false
+		// true  = setPosition() to snap client to simulation (original behaviour, may rubber-band on servers)
+		// false = stop executor on drift and recalculate from real position (server-safe, default)
+		builder.then(literal("driftCorrection").then(argument("enabled", BoolArgumentType.bool()).executes(context -> {
+			TungstenConfig.get().driftCorrectionEnabled = BoolArgumentType.getBool(context, "enabled");
+			TungstenConfig.save();
+			Debug.logMessage("driftCorrectionEnabled = " + TungstenConfig.get().driftCorrectionEnabled);
+			return SINGLE_SUCCESS;
+		})));
+
+		// ;settings driftThreshold 0.5
+		builder.then(literal("driftThreshold").then(argument("blocks", DoubleArgumentType.doubleArg(0.0, 10.0)).executes(context -> {
+			TungstenConfig.get().driftThreshold = DoubleArgumentType.getDouble(context, "blocks");
+			TungstenConfig.save();
+			Debug.logMessage("driftThreshold = " + TungstenConfig.get().driftThreshold);
+			return SINGLE_SUCCESS;
+		})));
 	}
 }

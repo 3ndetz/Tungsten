@@ -1498,17 +1498,19 @@ public class Agent {
                 player.getPos().x == this.posX ? "x" : this.posX,
                 player.getPos().y == this.posY ? "y" : this.posY,
                 player.getPos().z == this.posZ ? "z" : this.posZ));
-            // I know this is probably a really stupid way to fix a mismatch but server doesnt seem to care so I'm doing it anyway!
             if (TungstenModDataContainer.EXECUTOR.isRunning()) {
-            	player.setPosition(this.posX, this.posY, this.posZ);
-//            	TungstenModDataContainer.EXECUTOR.stop = true;
-//            	TungstenModDataContainer.PATHFINDER.stop.set(true);
-            	
-
-            	if (TungstenModRenderContainer.ERROR.size() > 1000) TungstenModRenderContainer.ERROR.clear();
-//            	Node node = TungstenModDataContainer.EXECUTOR.getCurrentNode();
-//            	if (node != null) RenderHelper.renderNode(node, TungstenModRenderContainer.ERROR);
-//            	TungstenModRenderContainer.ERROR.add(new Cuboid(player.getPos(), new Vec3d(0.1, 0.5, 0.1), Color.RED));
+                double drift = player.getPos().distanceTo(new Vec3d(this.posX, this.posY, this.posZ));
+                if (drift > kaptainwutax.tungsten.TungstenConfig.get().driftThreshold) {
+                    if (kaptainwutax.tungsten.TungstenConfig.get().driftCorrectionEnabled) {
+                        // Snap client position to simulation value (may cause rubber-banding on servers)
+                        player.setPosition(this.posX, this.posY, this.posZ);
+                    } else {
+                        // Stop executor so path recalculates from real server position
+                        TungstenModDataContainer.EXECUTOR.stop = true;
+                        TungstenModDataContainer.PATHFINDER.stop.set(true);
+                    }
+                }
+                if (TungstenModRenderContainer.ERROR.size() > 1000) TungstenModRenderContainer.ERROR.clear();
             }
         }
         
@@ -1520,36 +1522,18 @@ public class Agent {
                 player.getVelocity().x == this.velX ? "x" : this.velX,
                 player.getVelocity().y == this.velY ? "y" : this.velY,
                 player.getVelocity().z == this.velZ ? "z" : this.velZ));
-            // I know this is probably a really stupid way to fix a mismatch but server doesnt seem to care so I'm doing it anyway!
+            // Do not call setVelocity() — that overrides server-authoritative velocity and
+            // causes position divergence leading to rubber-band teleports.
+            // Log the mismatch only; path will self-correct on next recalc if needed.
             if (TungstenModDataContainer.EXECUTOR.isRunning()) {
-            	
-            	values.add(String.format("Velocity mismatch by (%s, %s, %s)",
+                values.add(String.format("Velocity mismatch by (%s, %s, %s)",
                         player.getVelocity().x - this.velX,
                         player.getVelocity().y - this.velY,
                         player.getVelocity().z - this.velZ));
-//            	System.out.println((float)player.getAttributeValue(EntityAttributes.SNEAKING_SPEED));
-            	player.setVelocity(this.velX, this.velY, this.velZ);
-            	Node node = TungstenModDataContainer.EXECUTOR.getCurrentNode();
-            	if (TungstenModRenderContainer.ERROR.size() > 1000) TungstenModRenderContainer.ERROR.clear();
-                if (node != null && node.agent.getPos().distanceTo(player.getPos()) > 0.78) {
-//                    TungstenModDataContainer.EXECUTOR.stop = true;
-////                    TungstenModDataContainer.PATHFINDER.stop.set(true);
-////                    player.setVelocity(0, 0, 0);
-//                    if (TungstenModDataContainer.EXECUTOR.blockPath != null) {
-//                        if (TungstenModDataContainer.PATHFINDER.active.get()) {
-//                            TungstenModDataContainer.PATHFINDER.stop.set(true);
-//                            while (TungstenModDataContainer.PATHFINDER.active.get()) {
-//                                try {
-//                                    Thread.sleep(250);
-//                                } catch (InterruptedException e) {
-//                                    throw new RuntimeException(e);
-//                                }
-//                            }
-//                        }
-//                        TungstenModDataContainer.PATHFINDER.find(TungstenModDataContainer.world, TungstenMod.TARGET, player, Optional.of(TungstenModDataContainer.EXECUTOR.blockPath));
-//                    }
+                Node node = TungstenModDataContainer.EXECUTOR.getCurrentNode();
+                if (TungstenModRenderContainer.ERROR.size() > 1000) TungstenModRenderContainer.ERROR.clear();
+                if (node != null) {
                     RenderHelper.renderNode(node, TungstenModRenderContainer.ERROR);
-                    TungstenModRenderContainer.ERROR.add(new Cuboid(player.getPos(), new Vec3d(0.1, 0.5, 0.1), Color.RED));
                 }
             }
         }
