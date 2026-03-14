@@ -27,9 +27,9 @@ public class NeoJump {
 		Agent agent = parent.agent;
 		
 		Direction jumpTowardsDirection = DirectionHelper.getHorizontalDirectionFromPos(nextBlockNode.previous.getPos(true), nextBlockNode.getPos(true));
-		float jumpTowardsRotation = jumpTowardsDirection.getPositiveHorizontalDegrees();
+		float jumpTowardsRotation = getDirectionDegrees(jumpTowardsDirection);
 		Direction neoDirection = nextBlockNode.getNeoSide();
-		float neoRotation = neoDirection.getPositiveHorizontalDegrees();
+		float neoRotation = getDirectionDegrees(neoDirection);
 
 		float desiredYaw = (float) DirectionHelper.calcYawFromVec3d(agent.getPos(), nextBlockNode.getPos(true));
         double distance = DistanceCalculator.getHorizontalEuclideanDistance(agent.getPos(), nextBlockNode.getPos(true));
@@ -85,6 +85,17 @@ public class NeoJump {
 	
 	private static float nudgeRotation(float rotation, float nudgeAmount) {
 		return DirectionHelper.calcYawFromRotation(rotation + nudgeAmount);
+	}
+
+	// Direction.getPositiveHorizontalDegrees() removed in MC 1.21
+	private static float getDirectionDegrees(Direction dir) {
+		switch (dir) {
+			case SOUTH: return 0f;
+			case WEST:  return 90f;
+			case NORTH: return 180f;
+			case EAST:  return 270f;
+			default:    return 0f;
+		}
 	}
 	
 }

@@ -7,8 +7,8 @@ import kaptainwutax.tungsten.helpers.render.RenderHelper;
 import kaptainwutax.tungsten.path.blockSpaceSearchAssist.BlockNode;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.option.GameOptions;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.PlayerInput;
+// import net.minecraft.server.network.ServerPlayerEntity; // server-side disabled
+import kaptainwutax.tungsten.agent.TungstenPlayerInput;
 
 import java.util.List;
 
@@ -84,57 +84,14 @@ public class PathExecutor {
     }
 
 
-    public void tick(ServerPlayerEntity player) {
-    	player.getAbilities().allowFlying = false;
-    	if(stop) {
-    		this.tick = this.path.size();
-    		player.setPlayerInput(PlayerInput.DEFAULT);
-		    player.getAbilities().allowFlying = allowedFlying;
-		    this.path = null;
-		    stop = false;
-    		return;
-    	}
-    	if(this.tick == this.path.size()) {
-    		long endTime = System.currentTimeMillis();
-    		long elapsedTime = endTime - startTime;
-    		long minutes = (elapsedTime / 1000) / 60;
-            long seconds = (elapsedTime / 1000) % 60;
-            long milliseconds = elapsedTime % 1000;
-            
-            Debug.logMessage("Time taken to execute: " + minutes + " minutes, " + seconds + " seconds, " + milliseconds + " milliseconds");
-
-    		player.setPlayerInput(PlayerInput.DEFAULT);
-		    player.getAbilities().allowFlying = allowedFlying;
-		    this.path = null;
-		    stop = false;
-			player.setVelocity(0, 0, 0);
-		    if (cb != null) {
-		    	cb.run();
-		    	cb = null;
-		    }
-	    } else {
-		    Node node = this.path.get(this.tick);
-
-		    if(this.tick != 0) {
-			    this.path.get(this.tick - 1).agent.compare(player, player.getPlayerInput(), true);
-		    }
-		    
-		    if(node.input != null) {
-			    player.setYaw(node.input.yaw);
-			    player.setPitch(node.input.pitch);
-			    if (player.isCreative()) player.stopGliding();
-
-	    		player.setPlayerInput(node.input.getPlayerInput());
-		    }
-	    }
-	    this.tick++;
-    }
+    // Server-side tick disabled: requires ServerPlayerEntity.setPlayerInput() (MC 1.21.4+ only)
+    // public void tick(ServerPlayerEntity player) { ... }
     
     public void tick(ClientPlayerEntity player, GameOptions options) {
     	player.getAbilities().allowFlying = false;
     	if(TungstenMod.pauseKeyBinding.isPressed() || stop) {
     		this.tick = this.path.size();
-    		player.input.playerInput = PlayerInput.DEFAULT;
+    		// player.input.playerInput = ... // MC 1.21: Input has no playerInput field
 		    options.forwardKey.setPressed(false);
 		    options.backKey.setPressed(false);
 		    options.leftKey.setPressed(false);
@@ -181,7 +138,7 @@ public class PathExecutor {
 		    if(node.input != null) {
 			    player.setYaw(node.input.yaw);
 			    player.setPitch(node.input.pitch);
-			    if (player.isCreative()) player.stopGliding();
+			    // player.stopGliding() removed in MC 1.21
 	    		options.forwardKey.setPressed(node.input.forward);
 			    options.backKey.setPressed(node.input.back);
 			    options.leftKey.setPressed(node.input.left);
@@ -209,8 +166,8 @@ public class PathExecutor {
     }
     
     
-    public static PlayerInput optionsToPlayerInput(GameOptions options) {
-    	return new PlayerInput(options.forwardKey.isPressed(), options.backKey.isPressed(), options.leftKey.isPressed(), options.rightKey.isPressed(), options.jumpKey.isPressed(), options.sneakKey.isPressed(), options.sprintKey.isPressed());
+    public static TungstenPlayerInput optionsToPlayerInput(GameOptions options) {
+    	return new TungstenPlayerInput(options.forwardKey.isPressed(), options.backKey.isPressed(), options.leftKey.isPressed(), options.rightKey.isPressed(), options.jumpKey.isPressed(), options.sneakKey.isPressed(), options.sprintKey.isPressed());
     }
 
 }

@@ -59,10 +59,7 @@ public class AgentShapeContext implements ShapeContext {
         return this.minY > (double)pos.getY() + shape.getMax(Direction.Axis.Y) - (double)1.0E-5f;
     }
 
-	@Override
-	public VoxelShape getCollisionShape(BlockState state, CollisionView world, BlockPos pos) {
-		// TODO Auto-generated method stub
-		return null;
-	}
+	// getCollisionShape not in ShapeContext interface in MC 1.21 — removed @Override
+	// public VoxelShape getCollisionShape(BlockState state, CollisionView world, BlockPos pos) { return null; }
 
 }

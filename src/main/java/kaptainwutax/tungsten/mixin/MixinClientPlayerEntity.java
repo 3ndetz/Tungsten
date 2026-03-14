@@ -1,6 +1,5 @@
 package kaptainwutax.tungsten.mixin;
 
-import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,19 +13,20 @@ import kaptainwutax.tungsten.Debug;
 import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
 import kaptainwutax.tungsten.agent.Agent;
+import kaptainwutax.tungsten.agent.TungstenPlayerInput;
 import kaptainwutax.tungsten.path.blockSpaceSearchAssist.BlockSpacePathFinder;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.encryption.PlayerPublicKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
 @Mixin(ClientPlayerEntity.class)
 public abstract class MixinClientPlayerEntity extends AbstractClientPlayerEntity {
 
-	public MixinClientPlayerEntity(ClientWorld world, GameProfile profile, @Nullable PlayerPublicKey publicKey) {
+	// MC 1.21: AbstractClientPlayerEntity constructor takes (ClientWorld, GameProfile) only
+	// PlayerPublicKey was removed in MC 1.20.5
+	public MixinClientPlayerEntity(ClientWorld world, GameProfile profile) {
 		super(world, profile);
 	}
 
@@ -49,7 +49,7 @@ public abstract class MixinClientPlayerEntity extends AbstractClientPlayerEntity
 		}
 		if (TungstenMod.pauseKeyBinding.isPressed()) {
 			try {
-				
+
 	        	if((TungstenModDataContainer.PATHFINDER.active.get() || TungstenModDataContainer.EXECUTOR.isRunning())) {
 	        		TungstenModDataContainer.PATHFINDER.stop.set(true);
 	        		TungstenModDataContainer.EXECUTOR.stop = true;
@@ -58,7 +58,7 @@ public abstract class MixinClientPlayerEntity extends AbstractClientPlayerEntity
 					Debug.logMessage("Nothing to stop.");
 	    		}
 
-	
+
 			} catch (Exception e) {
 				// TODO: handle exception
 			}
@@ -75,10 +75,21 @@ public abstract class MixinClientPlayerEntity extends AbstractClientPlayerEntity
 
 	@Inject(method = "tick", at = @At(value = "RETURN"))
 	public void end(CallbackInfo ci) {
+		// MC 1.21: Input has no playerInput field; build TungstenPlayerInput from input fields
+		ClientPlayerEntity self = (ClientPlayerEntity)(Object)this;
+		TungstenPlayerInput currentInput = new TungstenPlayerInput(
+			self.input.movementForward > 0,
+			self.input.movementForward < 0,
+			self.input.movementSideways > 0,
+			self.input.movementSideways < 0,
+			self.input.jumping,
+			self.input.sneaking,
+			self.isSprinting()
+		);
 		if (TungstenModDataContainer.EXECUTOR.isRunning() && TungstenModDataContainer.EXECUTOR.getCurrentTick() > 0) {
-			TungstenModDataContainer.EXECUTOR.getPath().get(TungstenModDataContainer.EXECUTOR.getCurrentTick() - 1).agent.compare((ClientPlayerEntity)(Object)this, ((ClientPlayerEntity)(Object)this).input.playerInput, true);
+			TungstenModDataContainer.EXECUTOR.getPath().get(TungstenModDataContainer.EXECUTOR.getCurrentTick() - 1).agent.compare(self, currentInput, true);
 		} else if(!this.getAbilities().flying && Agent.INSTANCE != null) {
-			Agent.INSTANCE.compare((ClientPlayerEntity)(Object)this, ((ClientPlayerEntity)(Object)this).input.playerInput, false);
+			Agent.INSTANCE.compare(self, currentInput, false);
 		}
 	}
 

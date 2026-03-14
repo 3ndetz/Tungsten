@@ -1,13 +1,13 @@
 package kaptainwutax.tungsten.agent;
 
 import kaptainwutax.tungsten.path.PathInput;
-import net.minecraft.util.PlayerInput;
+import kaptainwutax.tungsten.agent.TungstenPlayerInput;
 import net.minecraft.util.math.Vec2f;
 
 public class AgentInput {
 	
 
-	public PlayerInput playerInput = PlayerInput.DEFAULT;
+	public TungstenPlayerInput playerInput = TungstenPlayerInput.DEFAULT;
 	protected Vec2f movementVector = Vec2f.ZERO;
 
 	public Vec2f getMovementInput() {
@@ -19,7 +19,7 @@ public class AgentInput {
 	}
 
 	public void jump() {
-		this.playerInput = new PlayerInput(
+		this.playerInput = new TungstenPlayerInput(
 			this.playerInput.forward(),
 			this.playerInput.backward(),
 			this.playerInput.left(),
@@ -45,7 +45,7 @@ public class AgentInput {
 	}
 	
 	public void tick() {
-		this.playerInput = new PlayerInput(
+		this.playerInput = new TungstenPlayerInput(
 				this.agent.keyForward,
 				this.agent.keyBack,
 				this.agent.keyLeft,

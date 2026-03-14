@@ -1,6 +1,5 @@
 package kaptainwutax.tungsten.mixin;
 
-import java.util.Map;
 import java.util.function.Consumer;
 
 import org.jetbrains.annotations.Nullable;
@@ -42,7 +41,7 @@ public abstract class MixinWorldChunk extends Chunk {
 	@Shadow public abstract FluidState getFluidState(BlockPos pos);
 
 	@Inject(method = "loadFromPacket", at = @At("RETURN"))
-	private void loadFromPacket(PacketByteBuf buf, Map<BlockPos, NbtCompound> blockEntityTagMap, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
+	private void loadFromPacket(PacketByteBuf buf, NbtCompound nbt, Consumer<ChunkData.BlockEntityVisitor> consumer, CallbackInfo ci) {
 		if(this.getWorld() != TungstenModDataContainer.world) {
 			TungstenModDataContainer.world = this.getWorld();
 		}

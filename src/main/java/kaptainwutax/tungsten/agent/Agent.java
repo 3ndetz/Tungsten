@@ -61,7 +61,7 @@ import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.registry.tag.EntityTypeTags;
 import net.minecraft.registry.tag.FluidTags;
 import net.minecraft.registry.tag.TagKey;
-import net.minecraft.util.PlayerInput;
+import kaptainwutax.tungsten.agent.TungstenPlayerInput;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
@@ -87,7 +87,7 @@ public class Agent {
         ImmutableMap.<EntityPose, EntityDimensions>builder()
         .put(EntityPose.STANDING, STANDING_DIMENSIONS)
         .put(EntityPose.SLEEPING, SLEEPING_DIMENSIONS)
-        .put(EntityPose.GLIDING, EntityDimensions.changing(0.6f, 0.6f))
+        .put(EntityPose.FALL_FLYING, EntityDimensions.changing(0.6f, 0.6f))
         .put(EntityPose.SWIMMING, EntityDimensions.changing(0.6f, 0.6f))
         .put(EntityPose.SPIN_ATTACK, EntityDimensions.changing(0.6f, 0.6f))
         .put(EntityPose.CROUCHING, EntityDimensions.changing(0.6f, 1.5f))
@@ -284,7 +284,7 @@ public class Agent {
         EntityPose newPose;
 
         if(this.fallFlying) {
-            newPose = EntityPose.GLIDING;
+            newPose = EntityPose.FALL_FLYING;
         } else {
             if(this.sleeping) {
                 newPose = EntityPose.SLEEPING;
@@ -341,7 +341,7 @@ public class Agent {
 
     public final float getEyeHeight(EntityPose pose, EntityDimensions dimensions) {
          return switch(pose) {
-            case SWIMMING, GLIDING, SPIN_ATTACK -> 0.4F;
+            case SWIMMING, FALL_FLYING, SPIN_ATTACK -> 0.4F;
             case CROUCHING -> 1.27F;
             case SLEEPING -> 0.2F;
             default -> 1.62F;
@@ -358,7 +358,7 @@ public class Agent {
 
         if(this.ticksToNextAutojump > 0) {
             --this.ticksToNextAutojump;
-            this.input.playerInput = new PlayerInput(
+            this.input.playerInput = new TungstenPlayerInput(
             		this.input.playerInput.forward(),
             		this.input.playerInput.backward(),
             		this.input.playerInput.left(),
@@ -1487,7 +1487,7 @@ public class Agent {
     }
     */
 
-    public void compare(PlayerEntity player, PlayerInput playerInput, boolean executor) {
+    public void compare(PlayerEntity player, TungstenPlayerInput playerInput, boolean executor) {
         List<String> values = new ArrayList<>();
         
         if(this.posX != player.getX() || this.posY != player.getY() || this.posZ != player.getZ()) {
@@ -1750,13 +1750,13 @@ public class Agent {
 
     public static Agent of(PlayerEntity player) {
         Agent agent = new Agent();
-        agent.keyForward = PlayerInput.DEFAULT.forward();
-        agent.keyBack = PlayerInput.DEFAULT.backward();
-        agent.keyLeft = PlayerInput.DEFAULT.left();
-        agent.keyRight = PlayerInput.DEFAULT.right();
-        agent.keyJump = PlayerInput.DEFAULT.jump();
-        agent.keySneak = PlayerInput.DEFAULT.sneak();
-        agent.keySprint = PlayerInput.DEFAULT.sprint();
+        agent.keyForward = TungstenPlayerInput.DEFAULT.forward();
+        agent.keyBack = TungstenPlayerInput.DEFAULT.backward();
+        agent.keyLeft = TungstenPlayerInput.DEFAULT.left();
+        agent.keyRight = TungstenPlayerInput.DEFAULT.right();
+        agent.keyJump = TungstenPlayerInput.DEFAULT.jump();
+        agent.keySneak = TungstenPlayerInput.DEFAULT.sneak();
+        agent.keySprint = TungstenPlayerInput.DEFAULT.sprint();
 
         agent.pose = player.getPose();
         agent.sprinting = player.isSprinting();
@@ -1817,7 +1817,7 @@ public class Agent {
     }
 
 
-    public static Agent of(PlayerEntity player, PlayerInput playerInput) {
+    public static Agent of(PlayerEntity player, TungstenPlayerInput playerInput) {
         Agent agent = new Agent();
         agent.keyForward = playerInput.forward();
         agent.keyBack = playerInput.backward();

@@ -1,6 +1,6 @@
 package kaptainwutax.tungsten.path;
 
-import net.minecraft.util.PlayerInput;
+import kaptainwutax.tungsten.agent.TungstenPlayerInput;
 
 public class PathInput {
 
@@ -19,8 +19,8 @@ public class PathInput {
 		this.yaw = yaw;
 	}
 	
-	public PlayerInput getPlayerInput() {
-		return new PlayerInput(forward, back, left, right, jump, sneak, sprint);
+	public TungstenPlayerInput getPlayerInput() {
+		return new TungstenPlayerInput(forward, back, left, right, jump, sneak, sprint);
 	}
 
 	@Override
