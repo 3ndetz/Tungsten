@@ -10,7 +10,8 @@ public class TungstenCommands {
 				new ClickCommand(mod),
 				new GotoCommand(mod),
 				new StopCommand(mod),
-				new SettingsCommand(mod)
+				new SettingsCommand(mod),
+				new FollowCommand(mod)
 		);
 	}
 }
