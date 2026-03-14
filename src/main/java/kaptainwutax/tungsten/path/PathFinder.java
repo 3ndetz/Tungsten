@@ -414,13 +414,19 @@ public class PathFinder {
 //	    if (!isBottomSlab && !node.agent.onGround && agentPos.y < bN.y && lBN != null && lBN.y <= bN.y && parentAgentPos != null && parentAgentPos.y > agentPos.y) {
 //	    	return true;
 //	    }
-	    return shouldNodeBeSkipped(node, target, closed, true, 
+	    // Clamp idx to valid range to prevent IndexOutOfBoundsException when
+	    // NEXT_CLOSEST_BLOCKNODE_IDX reaches blockPath.size() at end of path.
+	    int _idx = blockPath.isPresent()
+	        ? Math.min(NEXT_CLOSEST_BLOCKNODE_IDX.get(), blockPath.get().size() - 1)
+	        : 0;
+	    int _prevIdx = Math.max(0, _idx - 1);
+	    return shouldNodeBeSkipped(node, target, closed, true,
 	        blockPath.isPresent() && (
-	            blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).isDoingLongJump(world) ||
-	            blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).isDoingNeo() ||
-	            blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get() - 1).isDoingCornerJump()
+	            blockPath.get().get(_idx).isDoingLongJump(world) ||
+	            blockPath.get().get(_idx).isDoingNeo() ||
+	            blockPath.get().get(_prevIdx).isDoingCornerJump()
 	        ),
-	        blockPath.isPresent() && !blockPath.get().get(NEXT_CLOSEST_BLOCKNODE_IDX.get()).isDoingNeo()
+	        blockPath.isPresent() && !blockPath.get().get(_idx).isDoingNeo()
 	    );
 	}
 	

@@ -15,6 +15,7 @@ import kaptainwutax.tungsten.TungstenModDataContainer;
 import kaptainwutax.tungsten.agent.Agent;
 import kaptainwutax.tungsten.agent.TungstenPlayerInput;
 import kaptainwutax.tungsten.task.FollowEntityTask;
+import kaptainwutax.tungsten.task.FollowPlayerTask;
 import kaptainwutax.tungsten.path.blockSpaceSearchAssist.BlockSpacePathFinder;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -34,6 +35,7 @@ public abstract class MixinClientPlayerEntity extends AbstractClientPlayerEntity
 	@Inject(method = "tick", at = @At("HEAD"))
 	public void start(CallbackInfo ci) {
 		FollowEntityTask.tick(this.getWorld(), (ClientPlayerEntity)(Object)this);
+		FollowPlayerTask.tick(this.getWorld(), (ClientPlayerEntity)(Object)this);
 
 		if(TungstenModDataContainer.EXECUTOR.isRunning()) {
 			TungstenModDataContainer.EXECUTOR.tick((ClientPlayerEntity)(Object)this, MinecraftClient.getInstance().options);

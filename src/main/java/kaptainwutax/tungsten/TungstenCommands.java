@@ -11,7 +11,8 @@ public class TungstenCommands {
 				new GotoCommand(mod),
 				new StopCommand(mod),
 				new SettingsCommand(mod),
-				new FollowCommand(mod)
+				new FollowCommand(mod),
+				new FollowPlayerCommand(mod)
 		);
 	}
 }
