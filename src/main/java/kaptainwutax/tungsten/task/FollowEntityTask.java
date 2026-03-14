@@ -97,12 +97,14 @@ public class FollowEntityTask {
             return;
         }
 
-        // Case 3: entity moved significantly → request stop + recalc
+        // Case 3: entity moved significantly → abort current calculation, keep executing old path
+        // Do NOT stop the executor — player keeps moving along the old path while new one is computed.
+        // When the new path is ready, PathFinder.executePath() calls addPath() (executor is still running)
+        // which appends the new path seamlessly.
         if (!stopRequested && tickCounter >= RECALC_TICKS
                 && lastTargetPos != null
                 && entityPos.distanceTo(lastTargetPos) > MIN_MOVE_DIST) {
             TungstenModDataContainer.PATHFINDER.stop.set(true);
-            TungstenModDataContainer.EXECUTOR.stop = true;
             stopRequested = true;
             tickCounter = 0;
         }
