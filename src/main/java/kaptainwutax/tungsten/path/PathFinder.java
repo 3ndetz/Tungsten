@@ -76,6 +76,10 @@ public class PathFinder {
 	 *  Default: 46 (~2.3s). Set lower (e.g. 5) for follow-entity close-range. */
 	public int minPathSizeForTimeout = 46;
 
+	/** Minimum path progress distance before bestSoFar can be accepted.
+	 *  Default: MIN_DIST_PATH (1.8). Set near 0 for snap/dash mode (accept any path immediately). */
+	public double minDistPath = MIN_DIST_PATH;
+
 	private long startTime;
 	private Node start;
 
@@ -350,7 +354,7 @@ public class PathFinder {
 	        Debug.logMessage("stopped!");
 	        stop.set(false);
 	    } else if (openSet.isEmpty()) {
-	        Debug.logMessage("Ran out of nodes!");
+	        TungstenMod.LOG.info("[PathFinder] Ran out of nodes.");
 	    }
 	    RenderHelper.clearRenderers();
 		closed.clear();
@@ -369,7 +373,7 @@ public class PathFinder {
             if (dist > bestDist) {
                 bestDist = dist;
             }
-            if (bestDist > MIN_DIST_PATH * MIN_DIST_PATH) { // square the comparison since distFromStartSq is squared
+            if (bestDist > TungstenModDataContainer.PATHFINDER.minDistPath * TungstenModDataContainer.PATHFINDER.minDistPath) { // square the comparison since distFromStartSq is squared
 //                if (logInfo) {
 //                    if (COEFFICIENTS[i] >= 3) {
 //                        System.out.println("Warning: cost coefficient is greater than three! Probably means that");
@@ -733,7 +737,7 @@ public class PathFinder {
 	      if (!result.isPresent() || result.get().size() < minPathSizeForTimeout
 	      		|| (!result.get().getLast().agent.onGround && !result.get().getLast().agent.touchingWater)
 	      		|| result.get().getLast().agent.isClimbing(TungstenModDataContainer.world)
-	      		|| result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 3.5) {
+	      		|| result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < TungstenModDataContainer.PATHFINDER.minDistPath * 2.0) {
 	          return false;
 	      }
 //        if (player.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 1 && next.agent.getPos().distanceTo(target) > 1) {

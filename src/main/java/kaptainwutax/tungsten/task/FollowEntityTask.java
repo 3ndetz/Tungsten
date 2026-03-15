@@ -5,7 +5,10 @@ import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 import net.minecraft.world.WorldView;
 
 /**
@@ -76,7 +79,9 @@ public class FollowEntityTask {
             return;
         }
 
-        Vec3d entityPos = targetEntity.getPos();
+        // Snap to block center (XZ) to avoid infinite recalc when entity stands on block edges
+        BlockPos bp = targetEntity.getBlockPos();
+        Vec3d entityPos = new Vec3d(bp.getX() + 0.5, targetEntity.getY(), bp.getZ() + 0.5);
         double distToTarget = player.getPos().distanceTo(entityPos);
 
         // Already close enough — stop executor, wait for entity to move
@@ -141,17 +146,33 @@ public class FollowEntityTask {
         lastTargetPos = entityPos;
         TungstenMod.TARGET = entityPos;
 
-        if (dist < 12) {
+        if (dist < 6 && hasLineOfSight(player, entityPos)) {
+            // Snap mode: accept the very first partial path found — fast, imprecise, good enough
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 120L;
+            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 1;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 0.1;
+        } else if (dist < 12) {
             TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 1500L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 5;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 0.5;
         } else if (dist < 25) {
             TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 4000L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 10;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 1.0;
         } else {
             TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 15000L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 20;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 1.8;
         }
 
         TungstenModDataContainer.PATHFINDER.find(world, entityPos, player);
+    }
+
+    /** True if no solid block obstructs the line from player's eyes to targetPos. */
+    private static boolean hasLineOfSight(ClientPlayerEntity player, Vec3d targetPos) {
+        Vec3d eyePos = player.getEyePos();
+        RaycastContext ctx = new RaycastContext(eyePos, targetPos,
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player);
+        return TungstenMod.mc.world.raycast(ctx).getType() == HitResult.Type.MISS;
     }
 }

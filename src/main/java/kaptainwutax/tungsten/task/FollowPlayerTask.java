@@ -9,7 +9,10 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 import net.minecraft.world.WorldView;
 
 /**
@@ -100,7 +103,9 @@ public class FollowPlayerTask {
         boolean hasEntity;
 
         if (targetEntity != null && !targetEntity.isRemoved()) {
-            targetPos = targetEntity.getPos();
+            // Snap to block center (XZ) to avoid infinite recalc when entity stands on block edges
+            BlockPos bp = targetEntity.getBlockPos();
+            targetPos = new Vec3d(bp.getX() + 0.5, targetEntity.getY(), bp.getZ() + 0.5);
             lastKnownPos = targetPos;
             hasEntity = true;
         } else if (lastKnownPos != null) {
@@ -253,29 +258,34 @@ public class FollowPlayerTask {
         lastTargetPos = targetPos;
         TungstenMod.TARGET = targetPos;
 
-        // Precision based on distance and terrain similarity (user's simple-terrain heuristic)
-        if (isSimpleTerrain(player, targetPos, dist)) {
-            // Close + flat → ultra-fast coarse path
+        if (dist < 6 && hasLineOfSight(player, targetPos)) {
+            // Snap mode: accept the very first partial path found — fast, imprecise, good enough
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 120L;
+            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 1;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 0.1;
+        } else if (dist < 12) {
             TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 1500L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 5;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 0.5;
         } else if (dist < 25) {
             TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 4000L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 10;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 1.0;
         } else {
             TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 15000L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 20;
+            TungstenModDataContainer.PATHFINDER.minDistPath = 1.8;
         }
 
         TungstenModDataContainer.PATHFINDER.find(world, targetPos, player);
     }
 
-    /**
-     * "Simple terrain": target is within 10 blocks AND roughly same Y level (< 2.5 blocks diff).
-     * This approximates "flat or nearly flat terrain between player and target".
-     */
-    private static boolean isSimpleTerrain(ClientPlayerEntity player, Vec3d targetPos, double dist) {
-        if (dist > 10) return false;
-        return Math.abs(player.getY() - targetPos.y) < 2.5;
+    /** True if no solid block obstructs the line from player's eyes to targetPos. */
+    private static boolean hasLineOfSight(ClientPlayerEntity player, Vec3d targetPos) {
+        Vec3d eyePos = player.getEyePos();
+        RaycastContext ctx = new RaycastContext(eyePos, targetPos,
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player);
+        return TungstenMod.mc.world.raycast(ctx).getType() == HitResult.Type.MISS;
     }
 
     /** Scan nearby players each tick to (re-)find target by name. */
