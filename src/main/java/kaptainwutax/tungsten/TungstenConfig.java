@@ -30,6 +30,14 @@ public class TungstenConfig {
     /** Blocks of drift before triggering correction or executor stop. */
     public double driftThreshold = 0.5;
 
+    /** If true: log verbose tick/drift/position messages to console.
+     *  Keep false in normal use to reduce noise. */
+    public boolean verboseDebugLogging = false;
+
+    /** If true: use Baritone for pathfinding in follow tasks (dist >= 6 blocks).
+     *  If false: fall back to Tungsten's own A* pathfinder. */
+    public boolean baritoneEnabled = true;
+
     // ----------------------------------------
 
     public static TungstenConfig get() {

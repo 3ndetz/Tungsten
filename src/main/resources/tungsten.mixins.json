@@ -19,7 +19,8 @@
     "AccessorChatInputSuggestor",
     "MixinChatInputSuggestor",
     "MixinSuggestionWindow",
-    "MixinChatHud"
+    "MixinChatHud",
+    "MixinInGameHud"
   ],
   "injectors": {
     "defaultRequire": 1

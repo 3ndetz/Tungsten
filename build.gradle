@@ -19,9 +19,17 @@ repositories {
 	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories.
-	
+
     flatDir {
         dirs './libs'
+    }
+    maven {
+        name = 'BaritoneLocalMaven'
+        url = file('../baritone_altoclef/maven')
+    }
+    maven {
+        name = 'babbaj-repo'
+        url = 'https://babbaj.github.io/maven/'
     }
 }
 
@@ -38,6 +46,14 @@ dependencies {
 	// These are included in the Fabric API production distribution and allow you to update your mod to the latest modules at a later more convenient time.
 
 	// modImplementation "net.fabricmc.fabric-api:fabric-api-deprecated:${project.fapi_version}"
+
+	// Baritone — bundled, same approach as altoclef
+	modImplementation "cabaletta:baritone-unoptimized-fabric:1.21"
+	include "cabaletta:baritone-unoptimized-fabric:1.21"
+
+	// Nether pathfinder — required by Baritone's ElytraProcess at classload time
+	implementation 'dev.babbaj:nether-pathfinder:1.5'
+	include 'dev.babbaj:nether-pathfinder:1.5'
 }
 
 processResources {

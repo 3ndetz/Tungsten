@@ -351,7 +351,7 @@ public class PathFinder {
 	    }
 	
 	    if (stop.get()) {
-	        Debug.logMessage("stopped!");
+	        if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("stopped!");
 	        stop.set(false);
 	    } else if (openSet.isEmpty()) {
 	        TungstenMod.LOG.info("[PathFinder] Ran out of nodes.");
@@ -742,7 +742,7 @@ public class PathFinder {
 	      }
 //        if (player.getPos().distanceTo(result.get().getFirst().agent.getPos()) < 1 && next.agent.getPos().distanceTo(target) > 1) {
 	    if (setCurrentPath(target, start, player)) {
-	    	Debug.logMessage("Time ran out!");
+	    	if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("Time ran out!");
 		    return true;
 	    }
 //        }

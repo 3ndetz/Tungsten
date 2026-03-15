@@ -43,5 +43,21 @@ public class SettingsCommand extends Command {
 			Debug.logMessage("driftThreshold = " + TungstenConfig.get().driftThreshold);
 			return SINGLE_SUCCESS;
 		})));
+
+		// ;settings baritone true/false
+		builder.then(literal("baritone").then(argument("enabled", BoolArgumentType.bool()).executes(context -> {
+			TungstenConfig.get().baritoneEnabled = BoolArgumentType.getBool(context, "enabled");
+			TungstenConfig.save();
+			Debug.logMessage("baritoneEnabled = " + TungstenConfig.get().baritoneEnabled);
+			return SINGLE_SUCCESS;
+		})));
+
+		// ;settings verboseDebug true/false
+		builder.then(literal("verboseDebug").then(argument("enabled", BoolArgumentType.bool()).executes(context -> {
+			TungstenConfig.get().verboseDebugLogging = BoolArgumentType.getBool(context, "enabled");
+			TungstenConfig.save();
+			Debug.logMessage("verboseDebugLogging = " + TungstenConfig.get().verboseDebugLogging);
+			return SINGLE_SUCCESS;
+		})));
 	}
 }

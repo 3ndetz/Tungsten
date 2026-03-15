@@ -1,5 +1,6 @@
 package kaptainwutax.tungsten.commands;
 
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
@@ -50,12 +51,21 @@ public class FollowPlayerCommand extends Command {
             return sb.buildFuture();
         };
 
+        // ;followPlayer <name>            — push mode (default, no stopping)
+        // ;followPlayer <name> <radius>   — follow at radius distance
         builder.then(argument("name", StringArgumentType.word())
                 .suggests(playerSuggestions)
                 .executes(context -> {
                     String name = StringArgumentType.getString(context, "name");
                     FollowPlayerTask.start(name);
                     return SINGLE_SUCCESS;
-                }));
+                })
+                .then(argument("radius", DoubleArgumentType.doubleArg(0.0, 64.0))
+                        .executes(context -> {
+                            String name   = StringArgumentType.getString(context, "name");
+                            double radius = DoubleArgumentType.getDouble(context, "radius");
+                            FollowPlayerTask.start(name, radius);
+                            return SINGLE_SUCCESS;
+                        })));
     }
 }

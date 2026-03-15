@@ -1,10 +1,11 @@
 package kaptainwutax.tungsten.task;
 
-import java.util.Random;
-
 import kaptainwutax.tungsten.Debug;
+import kaptainwutax.tungsten.TungstenConfig;
 import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
+import kaptainwutax.tungsten.path.BaritoneDelegate;
+import kaptainwutax.tungsten.util.WindMouseRotation;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
@@ -16,271 +17,274 @@ import net.minecraft.world.RaycastContext;
 import net.minecraft.world.WorldView;
 
 /**
- * Follows a player by name. Handles re-discovery when the player disappears and returns.
+ * Follows a named player. Handles re-discovery when they disappear and return.
  *
- * Modes:
- *   DYNAMIC  — normal follow with distance-based precision (fast for close/flat, slower for far)
- *   STATIC   — full pathfind to a fixed position (when 10s of no progress getting within 5 blocks)
+ * Modes (priority order):
+ *   SUPER_FAST — dist < 6 + LOS + outside followRadius:
+ *                  direct sprint via WindMouse rotation, no pathfinder
+ *   BARITONE   — dist >= 6 (or no LOS): Baritone GoalFollowEntity / GoalBlock
  *
- * On failure in STATIC mode: add random XZ offset and retry.
- * When target starts moving again (in STATIC mode): switch back to DYNAMIC.
- * When target disappears: follow lastKnownPos until re-found.
+ * followRadius controls the stop distance.
+ *   0   → push mode: never stop, always sprint into the target (default)
+ *   > 0 → maintain given distance; stop when within radius
+ *
+ * When target disappears: Baritone navigates to lastKnownPos until re-found.
  */
 public class FollowPlayerTask {
 
-    // --- constants ---
-    private static final int RECALC_TICKS = 15;
-    private static final double MIN_MOVE_DIST = 1.5;
-    private static final double CLOSE_ENOUGH = 2.0;
-    private static final int STUCK_TICKS = 30;
-    private static final double PROGRESS_DIST = 5.0;
-    private static final long NO_PROGRESS_MS = 10_000L;
-    private static final long STATIC_TIMEOUT_MS = 10_000L;
-    private static final double RANDOM_OFFSET_RANGE = 5.0;
+    private static final double SUPER_FAST_DIST  = 6.0;
+    private static final double BARITONE_MIN_RADIUS = 0.5;
+    // DYNAMIC fallback constants
+    private static final int    RECALC_TICKS    = 15;
+    private static final double MIN_MOVE_DIST   = 1.5;
+    private static final int    STUCK_TICKS     = 30;
 
-    // --- persistent identity ---
-    private static String targetName = null;
-    private static Entity targetEntity = null;
-    private static Vec3d lastKnownPos = null;
-    private static boolean active = false;
+    // ── identity ──────────────────────────────────────────────────────────────
+    private static String  targetName   = null;
+    private static Entity  targetEntity = null;
+    private static Vec3d   lastKnownPos = null;
+    private static boolean active       = false;
 
-    // --- recalc ---
-    private static Vec3d lastTargetPos = null;
-    private static int tickCounter = 0;
+    // ── config ────────────────────────────────────────────────────────────────
+    private static double followRadius = 0.0;
+
+    // ── mode ──────────────────────────────────────────────────────────────────
+    private enum Mode { SUPER_FAST, PATHFINDING }
+    private static Mode mode = Mode.PATHFINDING;
+
+    // ── Baritone tracking ─────────────────────────────────────────────────────
+    private static Entity baritoneLastEntity = null;
+
+    // ── DYNAMIC fallback state ────────────────────────────────────────────────
+    private static Vec3d   lastTargetPos = null;
+    private static int     tickCounter   = 0;
+    private static int     stuckTicks    = 0;
     private static boolean stopRequested = false;
-    private static int stuckTicks = 0;
+    // Cooldown (ticks) before Baritone may take over after Tungsten ran
+    private static final int SWITCH_COOLDOWN_TICKS = 60; // 3 sec
+    private static int     switchCooldown = 0;
 
-    // --- progress / mode ---
-    private enum Mode { DYNAMIC, STATIC }
-    private static Mode mode = Mode.DYNAMIC;
-    private static long lastProgressTime = -1;
-    private static long staticModeStartTime = -1;
-    private static boolean staticModePathStarted = false;
-    private static Vec3d staticModeTarget = null;
-    private static final Random random = new Random();
+    // ─────────────────────────────────────────────────────────────────────────
 
-    // -------------------------------------------------------------------------
-
+    /** Start following with push mode (never stop). */
     public static void start(String name) {
-        targetName = name;
-        targetEntity = null;
-        lastKnownPos = null;
-        lastTargetPos = null;
-        tickCounter = 0;
-        stuckTicks = 0;
-        stopRequested = false;
-        mode = Mode.DYNAMIC;
-        lastProgressTime = System.currentTimeMillis();
-        staticModePathStarted = false;
-        staticModeTarget = null;
-        active = true;
-        Debug.logMessage("Following player: " + name);
+        start(name, 0.0);
+    }
+
+    /** Start following, stopping when within followRadius blocks (0 = push mode). */
+    public static void start(String name, double followRadius) {
+        targetName         = name;
+        targetEntity       = null;
+        lastKnownPos       = null;
+        baritoneLastEntity = null;
+        lastTargetPos      = null;
+        tickCounter        = 0;
+        stuckTicks         = 0;
+        stopRequested      = false;
+        switchCooldown     = 0;
+        mode               = Mode.PATHFINDING;
+        FollowPlayerTask.followRadius = followRadius;
+        active             = true;
+        String suffix = followRadius > 0 ? " (radius=" + followRadius + ")" : " (push mode)";
+        Debug.logMessage("Following player: " + name + suffix);
     }
 
     public static void stop() {
-        active = false;
-        targetName = null;
-        targetEntity = null;
-        stopRequested = false;
-        stuckTicks = 0;
+        active             = false;
+        targetName         = null;
+        targetEntity       = null;
+        mode               = Mode.PATHFINDING;
+        baritoneLastEntity = null;
+        stopRequested      = false;
+        stuckTicks         = 0;
+        switchCooldown     = 0;
+        releaseKeys();
+        BaritoneDelegate.stop();
         TungstenModDataContainer.PATHFINDER.stop.set(true);
         TungstenModDataContainer.EXECUTOR.stop = true;
         Debug.logMessage("FollowPlayer stopped.");
     }
 
-    public static boolean isActive() { return active; }
-    public static String getTargetName() { return targetName; }
+    public static boolean isActive()        { return active; }
+    public static String  getTargetName()   { return targetName; }
+    public static double  getFollowRadius() { return followRadius; }
 
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
 
     public static void tick(WorldView world, ClientPlayerEntity player) {
         if (!active) return;
 
-        // Try to (re-)discover the target player each tick
         tryRediscover();
 
-        Vec3d targetPos;
+        Vec3d   targetPos;
         boolean hasEntity;
 
         if (targetEntity != null && !targetEntity.isRemoved()) {
-            // Snap to block center (XZ) to avoid infinite recalc when entity stands on block edges
             BlockPos bp = targetEntity.getBlockPos();
-            targetPos = new Vec3d(bp.getX() + 0.5, targetEntity.getY(), bp.getZ() + 0.5);
+            targetPos    = new Vec3d(bp.getX() + 0.5, targetEntity.getY(), bp.getZ() + 0.5);
             lastKnownPos = targetPos;
-            hasEntity = true;
+            hasEntity    = true;
         } else if (lastKnownPos != null) {
             targetPos = lastKnownPos;
             hasEntity = false;
         } else {
-            // No position known yet — keep searching
+            return; // no position known yet
+        }
+
+        double dist          = player.getPos().distanceTo(targetPos);
+        boolean outsideRadius = followRadius <= 0 || dist >= followRadius;
+
+        // ── SUPER_FAST: dist < 6 + LOS + outside followRadius ────────────────
+        boolean canSuperFast = dist < SUPER_FAST_DIST && outsideRadius
+                && hasEntity && hasLineOfSight(player, targetPos);
+
+        if (canSuperFast) {
+            if (mode != Mode.SUPER_FAST) {
+                mode = Mode.SUPER_FAST;
+                BaritoneDelegate.stop();
+                baritoneLastEntity = null;
+                TungstenMod.LOG.info("[FollowPlayer] MODE: SUPER_FAST (dist="
+                        + String.format("%.1f", dist) + ", LOS=true)");
+            }
+            doDirectSprint(player, targetPos);
             return;
         }
 
-        double dist = player.getPos().distanceTo(targetPos);
-
-        // Progress tracking
-        if (dist < PROGRESS_DIST) {
-            lastProgressTime = System.currentTimeMillis();
-            if (mode == Mode.STATIC) {
-                mode = Mode.DYNAMIC;
-                staticModePathStarted = false;
-                TungstenMod.LOG.info("[FollowPlayer] Progress made, back to dynamic.");
-            }
+        // Leaving SUPER_FAST → back to pathfinding
+        if (mode == Mode.SUPER_FAST) {
+            mode = Mode.PATHFINDING;
+            releaseKeys();
+            baritoneLastEntity = null; // force Baritone restart
+            TungstenMod.LOG.info("[FollowPlayer] MODE: PATHFINDING");
         }
 
-        // Close enough — hold
-        if (dist < CLOSE_ENOUGH && hasEntity) {
-            if (TungstenModDataContainer.EXECUTOR.isRunning()) {
-                TungstenModDataContainer.EXECUTOR.stop = true;
-            }
-            tickCounter = 0;
-            stuckTicks = 0;
+        // ── Within followRadius: stop (only when followRadius > 0) ───────────
+        if (followRadius > 0 && !outsideRadius && hasEntity) {
+            if (BaritoneDelegate.isPathing()) BaritoneDelegate.stop();
             return;
         }
 
-        // Check no-progress timeout → switch to static mode
-        if (mode == Mode.DYNAMIC && hasEntity
-                && lastProgressTime > 0
-                && System.currentTimeMillis() - lastProgressTime > NO_PROGRESS_MS) {
-            mode = Mode.STATIC;
-            staticModePathStarted = false;
-            staticModeTarget = targetPos;
-            staticModeStartTime = System.currentTimeMillis();
-            TungstenModDataContainer.PATHFINDER.stop.set(true);
-            TungstenModDataContainer.EXECUTOR.stop = true;
-            stopRequested = false;
-            TungstenMod.LOG.info("[FollowPlayer] No progress for 10s, switching to static pathfind...");
-        }
+        double closeEnough = Math.max(followRadius, BARITONE_MIN_RADIUS);
 
-        if (mode == Mode.STATIC) {
-            handleStaticMode(world, player, targetPos, hasEntity);
-        } else {
-            handleDynamic(world, player, targetPos, dist);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Dynamic mode — follows moving target with recalculation
-    // -------------------------------------------------------------------------
-
-    private static void handleDynamic(WorldView world, ClientPlayerEntity player, Vec3d targetPos, double dist) {
+        // ── Tungsten A*: always runs as primary pathfinder ───────────────────
         tickCounter++;
-        boolean pathfinderFree = !TungstenModDataContainer.PATHFINDER.active.get();
-        boolean executorFree = !TungstenModDataContainer.EXECUTOR.isRunning();
+        boolean executorRunning  = TungstenModDataContainer.EXECUTOR.isRunning();
+        boolean pathfinderActive = TungstenModDataContainer.PATHFINDER.active.get();
 
-        // Nothing running → start immediately
-        if (pathfinderFree && executorFree && !stopRequested) {
+        if (!pathfinderActive && !executorRunning && !stopRequested) {
             stuckTicks = 0;
             startFind(world, player, targetPos, dist);
-            return;
-        }
-
-        // Recalc ready
-        if (stopRequested && pathfinderFree) {
+        } else if (stopRequested && !pathfinderActive) {
             stopRequested = false;
-            stuckTicks = 0;
+            stuckTicks    = 0;
             startFind(world, player, targetPos, dist);
-            return;
-        }
-
-        // Target moved → abort calculation, keep executor running
-        if (!stopRequested && tickCounter >= RECALC_TICKS
+        } else if (!stopRequested && tickCounter >= RECALC_TICKS
                 && lastTargetPos != null
                 && targetPos.distanceTo(lastTargetPos) > MIN_MOVE_DIST) {
             TungstenModDataContainer.PATHFINDER.stop.set(true);
             stopRequested = true;
-            tickCounter = 0;
-        }
-
-        // Stuck detection: executor idle but pathfinder busy too long
-        if (executorFree && !pathfinderFree) {
-            stuckTicks++;
-            if (stuckTicks >= STUCK_TICKS) {
+            tickCounter   = 0;
+        } else if (!executorRunning && !pathfinderActive) {
+            if (++stuckTicks >= STUCK_TICKS) {
                 TungstenModDataContainer.PATHFINDER.stop.set(true);
                 stopRequested = true;
-                stuckTicks = 0;
+                stuckTicks    = 0;
             }
         } else {
             stuckTicks = 0;
         }
-    }
 
-    // -------------------------------------------------------------------------
-    // Static mode — full pathfind to fixed position, retry with offset on fail
-    // -------------------------------------------------------------------------
-
-    private static void handleStaticMode(WorldView world, ClientPlayerEntity player, Vec3d targetPos, boolean hasEntity) {
-        // If target started moving again → back to dynamic
-        if (hasEntity && staticModeTarget != null
-                && targetPos.distanceTo(staticModeTarget) > MIN_MOVE_DIST * 2) {
-            mode = Mode.DYNAMIC;
-            staticModePathStarted = false;
-            lastProgressTime = System.currentTimeMillis();
-            TungstenModDataContainer.PATHFINDER.stop.set(true);
-            stopRequested = false;
-            TungstenMod.LOG.info("[FollowPlayer] Target moving again, back to dynamic.");
-            return;
-        }
-
-        boolean pathfinderFree = !TungstenModDataContainer.PATHFINDER.active.get();
-        boolean executorRunning = TungstenModDataContainer.EXECUTOR.isRunning();
-        long elapsed = System.currentTimeMillis() - staticModeStartTime;
-
-        if (!staticModePathStarted) {
-            if (!pathfinderFree) return; // wait for pathfinder to free up
-            // Launch full static pathfind
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = STATIC_TIMEOUT_MS;
-            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 20;
-            Vec3d dest = staticModeTarget != null ? staticModeTarget : targetPos;
-            TungstenMod.TARGET = dest;
-            TungstenModDataContainer.PATHFINDER.find(world, dest, player);
-            staticModePathStarted = true;
-            staticModeStartTime = System.currentTimeMillis();
-            return;
-        }
-
-        // Detect failure: pathfinder done, executor not running, and we've waited long enough
-        if (pathfinderFree && !executorRunning && elapsed > STATIC_TIMEOUT_MS + 3000) {
-            // Failed — pick a random offset position and retry
-            double ox = (random.nextDouble() - 0.5) * RANDOM_OFFSET_RANGE * 2;
-            double oz = (random.nextDouble() - 0.5) * RANDOM_OFFSET_RANGE * 2;
-            staticModeTarget = targetPos.add(ox, 0, oz);
-            staticModePathStarted = false;
-            staticModeStartTime = System.currentTimeMillis();
-            TungstenMod.LOG.info("[FollowPlayer] Static pathfind failed, retrying with offset (" + (int)ox + "," + (int)oz + ")...");
+        // ── Baritone: parallel fallback — runs when Tungsten executor is idle ─
+        if (TungstenConfig.get().baritoneEnabled) {
+            if (executorRunning) {
+                // Tungsten executing — reset cooldown and stop Baritone
+                switchCooldown = SWITCH_COOLDOWN_TICKS;
+                if (baritoneLastEntity != null || BaritoneDelegate.isActive()) {
+                    BaritoneDelegate.stop();
+                    baritoneLastEntity = null;
+                    TungstenMod.LOG.info("[FollowPlayer] Baritone yields to Tungsten");
+                }
+            } else {
+                // Drop stale entity reference so Baritone restarts with correct target
+                if (baritoneLastEntity != null && baritoneLastEntity.isRemoved()) {
+                    BaritoneDelegate.stop();
+                    baritoneLastEntity = null;
+                }
+                if (switchCooldown > 0) {
+                    switchCooldown--;
+                } else if (hasEntity) {
+                    if (targetEntity != baritoneLastEntity) {
+                        baritoneLastEntity = targetEntity;
+                        BaritoneDelegate.followEntity(targetEntity, closeEnough);
+                        TungstenMod.LOG.info("[FollowPlayer] Baritone fallback (entity: " + targetName + ")");
+                    } else if (!BaritoneDelegate.isPathing() && !BaritoneDelegate.isActive()) {
+                        BaritoneDelegate.followEntity(targetEntity, closeEnough);
+                    }
+                } else if (lastKnownPos != null) {
+                    if (!BaritoneDelegate.isPathing() && !BaritoneDelegate.isActive()) {
+                        baritoneLastEntity = null;
+                        BaritoneDelegate.goToBlock(lastKnownPos, (int) Math.max(closeEnough, 1));
+                        TungstenMod.LOG.info("[FollowPlayer] Baritone fallback (navigating to lastKnownPos)");
+                    }
+                }
+            }
+        } else if (BaritoneDelegate.isActive()) {
+            BaritoneDelegate.stop();
+            baritoneLastEntity = null;
         }
     }
-
-    // -------------------------------------------------------------------------
 
     private static void startFind(WorldView world, ClientPlayerEntity player, Vec3d targetPos, double dist) {
-        tickCounter = 0;
+        tickCounter   = 0;
         lastTargetPos = targetPos;
         TungstenMod.TARGET = targetPos;
 
         if (dist < 6 && hasLineOfSight(player, targetPos)) {
-            // Snap mode: accept the very first partial path found — fast, imprecise, good enough
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 120L;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 120L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 1;
-            TungstenModDataContainer.PATHFINDER.minDistPath = 0.1;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 0.1;
         } else if (dist < 12) {
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 1500L;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 1500L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 5;
-            TungstenModDataContainer.PATHFINDER.minDistPath = 0.5;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 0.5;
         } else if (dist < 25) {
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 4000L;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 4000L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 10;
-            TungstenModDataContainer.PATHFINDER.minDistPath = 1.0;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 1.0;
         } else {
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs = 15000L;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 15000L;
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 20;
-            TungstenModDataContainer.PATHFINDER.minDistPath = 1.8;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 1.8;
         }
-
         TungstenModDataContainer.PATHFINDER.find(world, targetPos, player);
     }
 
-    /** True if no solid block obstructs the line from player's eyes to targetPos. */
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Direct sprint toward target via WindMouse rotation — no pathfinder. */
+    private static void doDirectSprint(ClientPlayerEntity player, Vec3d targetPos) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        Vec3d pos = player.getPos();
+        double dx = targetPos.x - pos.x;
+        double dz = targetPos.z - pos.z;
+        float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        // Render mixin applies WindMouse rotation at render frequency
+        WindMouseRotation.INSTANCE.setTarget(targetYaw, player.getPitch());
+        mc.options.forwardKey.setPressed(true);
+        mc.options.sprintKey.setPressed(true);
+        // Always jump when on ground for aggressive push
+        mc.options.jumpKey.setPressed(player.isOnGround());
+    }
+
+    private static void releaseKeys() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        mc.options.forwardKey.setPressed(false);
+        mc.options.sprintKey.setPressed(false);
+        mc.options.jumpKey.setPressed(false);
+        WindMouseRotation.INSTANCE.clearTarget();
+    }
+
+    /** True if no solid block obstructs the line from player eyes to targetPos. */
     private static boolean hasLineOfSight(ClientPlayerEntity player, Vec3d targetPos) {
         Vec3d eyePos = player.getEyePos();
         RaycastContext ctx = new RaycastContext(eyePos, targetPos,
@@ -291,24 +295,16 @@ public class FollowPlayerTask {
     /** Scan nearby players each tick to (re-)find target by name. */
     private static void tryRediscover() {
         if (targetName == null) return;
-        // If we already have a valid entity, keep it
         if (targetEntity != null && !targetEntity.isRemoved()) return;
 
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.world == null) return;
         for (PlayerEntity p : mc.world.getPlayers()) {
             if (p.getName().getString().equalsIgnoreCase(targetName)) {
-                if (targetEntity == null) {
-                    TungstenMod.LOG.info("[FollowPlayer] Found player: " + targetName);
-                } else {
-                    TungstenMod.LOG.info("[FollowPlayer] Re-found player: " + targetName);
-                }
                 targetEntity = p;
-                // Reset no-progress timer when we re-find them
-                lastProgressTime = System.currentTimeMillis();
                 return;
             }
         }
-        targetEntity = null; // not in range
+        targetEntity = null;
     }
 }
