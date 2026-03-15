@@ -2,13 +2,20 @@ package kaptainwutax.tungsten.commands;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 
 import kaptainwutax.tungsten.Debug;
 import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.commandsystem.Command;
 import kaptainwutax.tungsten.commandsystem.CommandException;
 import kaptainwutax.tungsten.task.FollowPlayerTask;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.command.CommandSource;
+
+import java.util.concurrent.CompletableFuture;
 
 public class FollowPlayerCommand extends Command {
 
@@ -28,11 +35,27 @@ public class FollowPlayerCommand extends Command {
             return SINGLE_SUCCESS;
         }));
 
-        // ;followPlayer <name>
-        builder.then(argument("name", StringArgumentType.word()).executes(context -> {
-            String name = StringArgumentType.getString(context, "name");
-            FollowPlayerTask.start(name);
-            return SINGLE_SUCCESS;
-        }));
+        // ;followPlayer <name>  — Tab shows online players from the server tab list
+        SuggestionProvider<CommandSource> playerSuggestions = (ctx, sb) -> {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc.getNetworkHandler() != null) {
+                String input = sb.getRemaining().toLowerCase();
+                for (PlayerListEntry entry : mc.getNetworkHandler().getPlayerList()) {
+                    String name = entry.getProfile().getName();
+                    if (name.toLowerCase().startsWith(input)) {
+                        sb.suggest(name);
+                    }
+                }
+            }
+            return sb.buildFuture();
+        };
+
+        builder.then(argument("name", StringArgumentType.word())
+                .suggests(playerSuggestions)
+                .executes(context -> {
+                    String name = StringArgumentType.getString(context, "name");
+                    FollowPlayerTask.start(name);
+                    return SINGLE_SUCCESS;
+                }));
     }
 }
