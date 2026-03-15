@@ -70,10 +70,18 @@ public class FollowPlayerTask {
     /** Scan nearby players each tick to (re-)find target by name. */
     private static void tryRediscover() {
         if (targetName == null) return;
-        if (targetEntity != null && !targetEntity.isRemoved()) return;
 
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.world == null) return;
+
+        // Validate existing entity is still in the CURRENT world.
+        // After reconnect, old entity reference may be stale even if !isRemoved().
+        if (targetEntity != null && !targetEntity.isRemoved()
+                && mc.world.getEntityById(targetEntity.getId()) == targetEntity) {
+            return; // still valid in current world
+        }
+
+        // Re-scan world for target player by name
         for (PlayerEntity p : mc.world.getPlayers()) {
             if (p.getName().getString().equalsIgnoreCase(targetName)) {
                 targetEntity = p;

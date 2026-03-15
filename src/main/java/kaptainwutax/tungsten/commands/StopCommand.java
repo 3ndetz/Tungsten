@@ -7,6 +7,8 @@ import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
 import kaptainwutax.tungsten.commandsystem.Command;
 import kaptainwutax.tungsten.path.PathFinder;
+import kaptainwutax.tungsten.task.FollowEntityTask;
+import kaptainwutax.tungsten.task.FollowPlayerTask;
 import net.minecraft.command.CommandSource;
 
 public class StopCommand extends Command {
@@ -16,22 +18,30 @@ public class StopCommand extends Command {
 
 	@Override
 	public void build(LiteralArgumentBuilder<CommandSource> builder) {
-		
+
 		builder.executes(context -> {
 	        try {
-				
-	        	if(TungstenModDataContainer.PATHFINDER.active.get() || TungstenModDataContainer.EXECUTOR.isRunning()) {
-	        		TungstenModDataContainer.PATHFINDER.stop.set(true);
-	        		TungstenModDataContainer.EXECUTOR.stop = true;
-					Debug.logMessage("Stopped!");
-	    		} else {
-					Debug.logMessage("Nothing to stop.");
-	    		}
+				boolean hadSomething = FollowPlayerTask.isActive()
+						|| FollowEntityTask.isActive()
+						|| TungstenModDataContainer.PATHFINDER.active.get()
+						|| TungstenModDataContainer.EXECUTOR.isRunning();
 
+				// Stop follow tasks (cascades to pathfinder + executor + Baritone)
+				if (FollowPlayerTask.isActive()) {
+					FollowPlayerTask.stop();
+				} else if (FollowEntityTask.isActive()) {
+					FollowEntityTask.stop();
+				}
+
+				// Stop standalone pathfinder/executor (e.g., ;goto)
+				TungstenModDataContainer.PATHFINDER.stop.set(true);
+				TungstenModDataContainer.EXECUTOR.stop = true;
+
+				Debug.logMessage(hadSomething ? "Stopped!" : "Nothing to stop.");
 			} catch (Exception e) {
 				// TODO: handle exception
 			}
-			
+
 			return SINGLE_SUCCESS;
 		});
 	}

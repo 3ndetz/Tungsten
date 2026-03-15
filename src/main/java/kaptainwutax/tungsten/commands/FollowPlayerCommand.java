@@ -26,16 +26,6 @@ public class FollowPlayerCommand extends Command {
 
     @Override
     public void build(LiteralArgumentBuilder<CommandSource> builder) {
-        // ;followPlayer stop
-        builder.then(literal("stop").executes(context -> {
-            if (FollowPlayerTask.isActive()) {
-                FollowPlayerTask.stop();
-            } else {
-                Debug.logMessage("Not following anyone.");
-            }
-            return SINGLE_SUCCESS;
-        }));
-
         // ;followPlayer <name>  — Tab shows online players from the server tab list
         SuggestionProvider<CommandSource> playerSuggestions = (ctx, sb) -> {
             MinecraftClient mc = MinecraftClient.getInstance();

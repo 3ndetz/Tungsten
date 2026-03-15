@@ -101,15 +101,18 @@ public class PathFinder {
 
         thread = new Thread(() -> {
             try {
-                while (!player.isOnGround() && !player.isTouchingWater()) {
-                    if (stop.get()) break;
-                    try {
-                        Thread.sleep(500);
-                    } catch(Exception e) {
-                        e.printStackTrace();
+                // Skip startup delays in aggressive close-range mode
+                if (searchTimeoutMs > 500) {
+                    while (!player.isOnGround() && !player.isTouchingWater()) {
+                        if (stop.get()) break;
+                        try {
+                            Thread.sleep(500);
+                        } catch(Exception e) {
+                            e.printStackTrace();
+                        }
                     }
+                    Thread.sleep(500);
                 }
-                Thread.sleep(500);
                 NEXT_CLOSEST_BLOCKNODE_IDX.set(1);
                 if (blockPath.isPresent()) {
                     NEXT_CLOSEST_BLOCKNODE_IDX.set(findClosestPositionIDX(world, player.getBlockPos(), blockPath.get()));
@@ -182,7 +185,7 @@ public class PathFinder {
 	    int timeCheckInterval = 1 << 3;
 	    double minVelocity = BlockStateChecker.isAnyWater(world.getBlockState(new BlockPos((int) target.getX(), (int) target.getY(), (int) target.getZ()))) ? 0.2 :  0.07;
 	
-	    if (player.getPos().distanceTo(target) < 1.0) {
+	    if (player.getPos().distanceTo(target) < 1.0 && minDistPath >= MIN_DIST_PATH) {
 	        Debug.logMessage("Already at target location!");
 	        return;
 	    }
@@ -354,7 +357,15 @@ public class PathFinder {
 	        if (kaptainwutax.tungsten.TungstenConfig.get().verboseDebugLogging) Debug.logMessage("stopped!");
 	        stop.set(false);
 	    } else if (openSet.isEmpty()) {
-	        TungstenMod.LOG.info("[PathFinder] Ran out of nodes.");
+	        TungstenMod.LOG.info("[PathFinder] Ran out of nodes, trying partial path...");
+	        // Instead of giving up, emit bestSoFar partial path
+	        Optional<List<Node>> partial = PathFinder.bestSoFar(false, 0, this.start, TARGET);
+	        if (partial.isPresent() && partial.get().size() >= 2) {
+	            executePath(partial.get());
+	            TungstenMod.LOG.info("[PathFinder] Emitted partial path: " + partial.get().size() + " nodes");
+	        } else {
+	            TungstenMod.LOG.info("[PathFinder] No usable partial path found.");
+	        }
 	    }
 	    RenderHelper.clearRenderers();
 		closed.clear();
@@ -734,9 +745,11 @@ public class PathFinder {
 	      // Emit partial path if: result exists, long enough, last node is stable (on ground or in water),
 	      // not climbing (mid-climb is unsafe to cut), and path covers meaningful distance.
 	      // Bug fix: was (onGround && touchingWater) — nearly impossible, now (onGround || touchingWater).
+	      boolean aggressive = TungstenModDataContainer.PATHFINDER.minDistPath < MIN_DIST_PATH;
 	      if (!result.isPresent() || result.get().size() < minPathSizeForTimeout
-	      		|| (!result.get().getLast().agent.onGround && !result.get().getLast().agent.touchingWater)
-	      		|| result.get().getLast().agent.isClimbing(TungstenModDataContainer.world)
+	      		|| (!aggressive && (
+	      		    (!result.get().getLast().agent.onGround && !result.get().getLast().agent.touchingWater)
+	      		    || result.get().getLast().agent.isClimbing(TungstenModDataContainer.world)))
 	      		|| result.get().getLast().agent.getPos().distanceTo(result.get().getFirst().agent.getPos()) < TungstenModDataContainer.PATHFINDER.minDistPath * 2.0) {
 	          return false;
 	      }

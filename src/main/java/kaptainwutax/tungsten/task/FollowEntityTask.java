@@ -9,6 +9,7 @@ import kaptainwutax.tungsten.util.WindMouseRotation;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.block.BlockState;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -17,7 +18,7 @@ import net.minecraft.world.WorldView;
 
 /**
  * Core entity-following engine. Contains ALL routing logic:
- * SUPER_FAST, Tungsten A*, Baritone fallback, TRAILING.
+ * LEAP (PvP close-range), Tungsten A*, Baritone fallback, TRAILING.
  *
  * Two usage modes:
  *   1. Direct:  start(entity, closeEnough) — auto-stops when entity is removed
@@ -26,7 +27,7 @@ import net.minecraft.world.WorldView;
  */
 public class FollowEntityTask {
 
-    private static final double SUPER_FAST_DIST    = 6.0;
+    private static final double LEAP_DIST          = 6.0;
     private static final double DEFAULT_CLOSE_ENOUGH = 2.0;
     private static final int    RECALC_TICKS       = 15;
     private static final double MIN_MOVE_DIST      = 1.5;
@@ -40,9 +41,8 @@ public class FollowEntityTask {
     private static double  closeEnough     = DEFAULT_CLOSE_ENOUGH;
     private static boolean managed         = false; // true = FollowPlayerTask controls entity
 
-    // ── mode ────────────────────────────────────────────────────────────────────
-    private enum Mode { SUPER_FAST, PATHFINDING }
-    private static Mode mode = Mode.PATHFINDING;
+    // ── LEAP mode (PvP close-range: sprint+jump, no camera — altoclef handles aim) ─
+    private static boolean leapActive = false;
 
     // ── Baritone ────────────────────────────────────────────────────────────────
     private static Entity baritoneLastEntity = null;
@@ -91,7 +91,7 @@ public class FollowEntityTask {
         stuckTicks         = 0;
         stopRequested      = false;
         switchCooldown     = 0;
-        mode               = Mode.PATHFINDING;
+        leapActive         = false;
         trail.reset();
     }
 
@@ -100,7 +100,7 @@ public class FollowEntityTask {
         managed            = false;
         targetEntity       = null;
         lastKnownPos       = null;
-        mode               = Mode.PATHFINDING;
+        leapActive         = false;
         baritoneLastEntity = null;
         stopRequested      = false;
         stuckTicks         = 0;
@@ -159,29 +159,19 @@ public class FollowEntityTask {
         if (hasEntity) trail.recordPosition(targetPos);
         trail.update(player.getPos(), targetPos);
 
-        // ── SUPER_FAST: dist < 6 + LOS + outside closeEnough ──────────────────
-        boolean canSuperFast = dist < SUPER_FAST_DIST && outsideRadius
-                && hasEntity && hasLineOfSight(player, targetPos);
+        // ── LEAP: PvP close-range sprint+jump (no camera — altoclef handles aim+attacks)
+        boolean canLeap = dist < LEAP_DIST && outsideRadius
+                && hasEntity && hasLineOfSight(player, targetPos)
+                && isFlatGround(player, targetPos);
 
-        if (canSuperFast) {
-            if (mode != Mode.SUPER_FAST) {
-                mode = Mode.SUPER_FAST;
-                BaritoneDelegate.stop();
-                baritoneLastEntity = null;
-                TungstenMod.LOG.info("[FollowEntity] MODE: SUPER_FAST (dist="
-                        + String.format("%.1f", dist) + ", LOS=true)");
-            }
-            doDirectSprint(player, targetPos);
-            return;
+        if (canLeap && !TungstenModDataContainer.EXECUTOR.isRunning()) {
+            doLeap(player);
+            leapActive = true;
+        } else if (leapActive) {
+            releaseLeapKeys();
+            leapActive = false;
         }
-
-        // Leaving SUPER_FAST → back to pathfinding
-        if (mode == Mode.SUPER_FAST) {
-            mode = Mode.PATHFINDING;
-            releaseKeys();
-            baritoneLastEntity = null; // force Baritone restart
-            TungstenMod.LOG.info("[FollowEntity] MODE: PATHFINDING");
-        }
+        // A* always runs — fall through to pathfinding below
 
         // ── Within closeEnough: hold position ─────────────────────────────────
         if (closeEnough > 0 && !outsideRadius && hasEntity) {
@@ -283,42 +273,85 @@ public class FollowEntityTask {
             TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 1;
             TungstenModDataContainer.PATHFINDER.minDistPath           = 0.1;
         } else if (dist < 12) {
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 1500L;
-            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 5;
-            TungstenModDataContainer.PATHFINDER.minDistPath           = 0.5;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 500L;
+            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 2;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 0.3;
         } else if (dist < 25) {
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 4000L;
-            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 10;
-            TungstenModDataContainer.PATHFINDER.minDistPath           = 1.0;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 1500L;
+            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 3;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 0.5;
         } else {
-            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 15000L;
-            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 20;
-            TungstenModDataContainer.PATHFINDER.minDistPath           = 1.8;
+            TungstenModDataContainer.PATHFINDER.searchTimeoutMs      = 3000L;
+            TungstenModDataContainer.PATHFINDER.minPathSizeForTimeout = 5;
+            TungstenModDataContainer.PATHFINDER.minDistPath           = 0.8;
         }
         TungstenModDataContainer.PATHFINDER.find(world, target, player);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
 
-    /** Direct sprint toward target via WindMouse rotation — no pathfinder. */
-    private static void doDirectSprint(ClientPlayerEntity player, Vec3d targetPos) {
+    /**
+     * LEAP: PvP close-range movement — sprint forward + jump (crit hits).
+     * NO camera rotation — altoclef controls aim and attacks.
+     * Only used on flat ground with LOS to target.
+     */
+    private static void doLeap(ClientPlayerEntity player) {
         MinecraftClient mc = MinecraftClient.getInstance();
-        Vec3d pos = player.getPos();
-        double dx = targetPos.x - pos.x;
-        double dz = targetPos.z - pos.z;
-        float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-        WindMouseRotation.INSTANCE.setTarget(targetYaw, player.getPitch());
+        // Movement only — camera is altoclef's responsibility
         mc.options.forwardKey.setPressed(true);
         mc.options.sprintKey.setPressed(true);
         mc.options.jumpKey.setPressed(player.isOnGround());
     }
 
-    private static void releaseKeys() {
+    /** Release movement keys set by LEAP (does NOT touch camera/WindMouse). */
+    private static void releaseLeapKeys() {
         MinecraftClient mc = MinecraftClient.getInstance();
         mc.options.forwardKey.setPressed(false);
         mc.options.sprintKey.setPressed(false);
         mc.options.jumpKey.setPressed(false);
+    }
+
+    /** Release all keys including WindMouse rotation (used by stop()). */
+    private static void releaseKeys() {
+        releaseLeapKeys();
         WindMouseRotation.INSTANCE.clearTarget();
+    }
+
+    /**
+     * Quick check: safe to sprint-leap directly?
+     * Flat ground between player and target — no voids, no lava, no walls.
+     * Prevents LEAP on SkyWars edges, bridges, etc.
+     */
+    private static boolean isFlatGround(ClientPlayerEntity player, Vec3d targetPos) {
+        if (!player.isOnGround()) return false;
+        if (Math.abs(targetPos.y - player.getY()) > 1.5) return false;
+
+        Vec3d pos = player.getPos();
+        double dx = targetPos.x - pos.x;
+        double dz = targetPos.z - pos.z;
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 1.0) return true;
+
+        dx /= len;
+        dz /= len;
+        int playerY = player.getBlockPos().getY();
+        WorldView world = TungstenMod.mc.world;
+
+        int steps = Math.min((int) len, 5);
+        for (int i = 1; i <= steps; i++) {
+            BlockPos check = new BlockPos(
+                (int) Math.floor(pos.x + dx * i),
+                playerY,
+                (int) Math.floor(pos.z + dz * i));
+            BlockPos below = check.down();
+            // Ground must be solid (no voids, no lava below)
+            BlockState ground = world.getBlockState(below);
+            if (!ground.isSolidBlock(world, below)) return false;
+            // Feet and head level must be passable (no walls)
+            if (world.getBlockState(check).isSolidBlock(world, check)) return false;
+            if (world.getBlockState(check.up()).isSolidBlock(world, check.up())) return false;
+        }
+        return true;
     }
 
     /** True if no solid block obstructs the line from player eyes to targetPos. */
