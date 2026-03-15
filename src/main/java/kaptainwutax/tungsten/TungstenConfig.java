@@ -34,9 +34,10 @@ public class TungstenConfig {
      *  Keep false in normal use to reduce noise. */
     public boolean verboseDebugLogging = false;
 
-    /** If true: use Baritone for pathfinding in follow tasks (dist >= 6 blocks).
-     *  If false: fall back to Tungsten's own A* pathfinder. */
-    public boolean baritoneEnabled = true;
+    /** If true: use Baritone as parallel fallback in follow tasks (dist >= 6 blocks).
+     *  If false: Tungsten A* only, no Baritone fallback.
+     *  Default: false — when embedded in altoclef, Baritone is managed by altoclef itself. */
+    public boolean baritoneEnabled = false;
 
     // ----------------------------------------
 
