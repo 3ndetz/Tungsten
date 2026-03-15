@@ -2,7 +2,7 @@
 
 [Baritone](https://github.com/cabaletta/baritone) that can't build/break blocks and looks like a NASA computing program
 
-![alt text](images/README/Tungsten2.gif)
+![alt text](assets/README/Tungsten2.gif)
 
 Adapted to be used with the [autoclef](https://github.com/3ndetz/autoclef).
 
