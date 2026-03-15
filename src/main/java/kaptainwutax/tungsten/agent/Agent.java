@@ -12,6 +12,7 @@ import it.unimi.dsi.fastutil.floats.FloatSet;
 import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
 import kaptainwutax.tungsten.Debug;
+import kaptainwutax.tungsten.TungstenConfig;
 import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
 import kaptainwutax.tungsten.TungstenModRenderContainer;
@@ -1725,7 +1726,7 @@ public class Agent {
             values.add(String.format("Submerged Fluids mismatch %s vs %s", ((AccessorEntity)player).getSubmergedFluidTag(), this.submergedFluids));
         }
 
-        if(!values.isEmpty()) {
+        if(!values.isEmpty() && TungstenConfig.get().verboseDebugLogging) {
             System.out.println("Tick " + player.age + " ===========================================");
             values.forEach(System.out::println);
         }

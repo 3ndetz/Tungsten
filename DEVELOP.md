@@ -5,99 +5,103 @@
 | Requirement | Version |
 |---|---|
 | Java (JDK) | 21 |
-| Gradle | bundled via `gradlew` (не нужно ставить отдельно) |
-| Git | любая актуальная версия |
-| Internet | нужен на первый build (~1 GB: MC + Fabric + nether-pathfinder) |
+| Gradle | bundled via `gradlew` (no separate install needed) |
+| Git | any recent version |
+| Internet | needed for the first build (~1 GB: MC + Fabric + nether-pathfinder) |
 
 ---
 
-## Структура папок (обязательно)
+## Folder structure (required)
 
 ```
-<любая папка>/
-├── Tungsten/               ← mod source, сюда запускаем gradle
-└── baritone_altoclef/      ← отдельный репо, должен лежать РЯДОМ с Tungsten/
-    ├── baritone/           ← git submodule (cabaletta/baritone, ветка 1.21)
-    ├── patches/            ← altoclef-патчи для baritone
-    ├── maven/              ← сгенерированный maven-репо (НЕ в git, нужно создать)
-    └── apply_patches.bat
+<any folder>/
+├── Tungsten/               <- mod source, run gradle here
+└── baritone_altoclef/      <- separate repo, must sit NEXT TO Tungsten/
+    ├── baritone/           <- git submodule (cabaletta/baritone)
+    ├── patches/            <- altoclef patches for baritone
+    ├── maven/              <- separate git repo with prebuilt JARs (MiranCZ/maven)
+    ├── apply_patches.bat   <- Windows
+    └── apply_patches.sh    <- Linux/Mac
 ```
 
-`Tungsten/build.gradle` читает Baritone из `../baritone_altoclef/maven` —
-папки должны быть **строго рядом** друг с другом.
+`Tungsten/build.gradle` pulls Baritone from `../baritone_altoclef/maven` —
+both folders **must** be side by side.
 
 ---
 
-## Шаг 1 — Настройка baritone_altoclef (один раз)
-
-`baritone_altoclef` — это отдельный репо с patched Baritone.
-Папка `maven/` **не хранится в git** и генерируется один раз вручную.
+## Step 1 — Clone baritone_altoclef (one time)
 
 ```bash
-# Клонируй рядом с Tungsten/ (уже есть — пропусти если папка уже скачана)
-git clone https://github.com/MiranCZ/baritone_altoclef
-
-# Перейди в папку
+# Clone next to Tungsten/ (skip if already there)
+git clone https://github.com/3ndetz/baritone_altoclef
 cd baritone_altoclef
 
-# Скачай submodule (папка baritone/ появится)
+# Pull the baritone submodule
 git submodule update --init
 
-# Переключи submodule на ветку MC 1.21
-cd baritone
+# maven/ is a separate git repo with prebuilt JARs.
+# It comes with the clone — nothing to build.
+```
+
+That's it. `maven/cabaletta/baritone-unoptimized-fabric/1.21/` already contains
+a ready-to-use `baritone-unoptimized-fabric-1.21.jar`. Jump to step 2.
+
+---
+
+## Step 1.5 — Rebuild Baritone (only if you changed baritone code)
+
+Only needed if you edited files inside `baritone/` (patches, fixes, etc.).
+If you just cloned — **skip this step**.
+
+```bash
+cd baritone_altoclef/baritone
+
+# Switch to the 1.21 branch
 git checkout origin/1.21
 
-# Вернись в baritone_altoclef и примени altoclef-патчи
+# Apply patches
 cd ..
-apply_patches.bat       # Windows
-# На Linux/Mac: cd baritone && git apply ../patches/*.patch
+apply_patches.bat           # Windows
+bash apply_patches.sh       # Linux/Mac
 
-# Собери Baritone и установи в локальный maven (~/.m2)
+# Build Baritone
 cd baritone
-./gradlew :fabric:publishToMavenLocal   # Linux/Mac
-gradlew.bat :fabric:publishToMavenLocal  # Windows
+gradlew.bat :fabric:build -x test    # Windows
+./gradlew :fabric:build -x test      # Linux/Mac
 ```
 
-После сборки Baritone лежит в:
+> The first baritone build is slow (5-10 min) — downloads mappings, MC, forge deps.
+> Subsequent builds are fast (~30 sec).
 
-```text
-~/.m2/repository/cabaletta/baritone-unoptimized-fabric/1.21/
+After the build, the JAR will be in:
+
+```
+baritone/fabric/build/libs/baritone-fabric-*.jar
 ```
 
-Теперь скопируй артефакты в папку `maven/`:
+Copy it into `maven/`:
 
 **Windows (PowerShell):**
 
 ```powershell
-$src = "$env:USERPROFILE\.m2\repository\cabaletta\baritone-unoptimized-fabric\1.21"
-$dst = "..\maven\cabaletta\baritone-unoptimized-fabric\1.21"
-New-Item -ItemType Directory -Force $dst
-Copy-Item "$src\*.jar","$src\*.pom" $dst
+$src = "baritone\fabric\build\libs"
+$dst = "maven\cabaletta\baritone-unoptimized-fabric\1.21"
+Copy-Item "$src\baritone-unoptimized-fabric-fabric-*.jar" "$dst\baritone-unoptimized-fabric-1.21.jar" -Force
 ```
 
 **Linux/Mac:**
 
 ```bash
-SRC=~/.m2/repository/cabaletta/baritone-unoptimized-fabric/1.21
-DST=../maven/cabaletta/baritone-unoptimized-fabric/1.21
-mkdir -p $DST
-cp $SRC/*.jar $SRC/*.pom $DST/
+cp baritone/fabric/build/libs/baritone-unoptimized-fabric-fabric-*.jar \
+   maven/cabaletta/baritone-unoptimized-fabric/1.21/baritone-unoptimized-fabric-1.21.jar
 ```
 
-Итого в `baritone_altoclef/maven/` должно появиться:
-
-```text
-maven/cabaletta/baritone-unoptimized-fabric/1.21/
-    baritone-unoptimized-fabric-1.21.jar
-    baritone-unoptimized-fabric-1.21.pom
-```
-
-> **Быстрый вариант:** если у кого-то уже есть рабочая папка `maven/` —
-> просто скопируй её целиком в `baritone_altoclef/`. Это 2 файла ~600KB.
+> Alternative: run `maven-windows.bat` or `maven-unix.sh` from `maven/maven-scripts/` —
+> they use `mvn install:install-file` to do the same thing.
 
 ---
 
-## Шаг 2 — Запуск Tungsten
+## Step 2 — Run Tungsten
 
 ```bash
 cd Tungsten
@@ -105,35 +109,36 @@ cd Tungsten
 gradlew.bat runClient       # Windows
 ```
 
-**Первый запуск** скачает (~1 GB):
+**First run** downloads (~1 GB):
 
-- Minecraft 1.21 + нативные библиотеки (Mojang CDN)
+- Minecraft 1.21 + native libs (Mojang CDN)
 - Fabric Loader 0.16.2 + Fabric API (FabricMC maven)
 - `dev.babbaj:nether-pathfinder:1.5` (babbaj.github.io/maven)
 
-`baritone-unoptimized-fabric:1.21` берётся **локально** из `../baritone_altoclef/maven`.
+`baritone-unoptimized-fabric:1.21` is pulled **locally** from `../baritone_altoclef/maven`.
 
-После первого скачивания всё кешируется в `~/.gradle/caches/`.
+Everything is cached in `~/.gradle/caches/` after the first download.
 
 ---
 
-## Сборка JAR (деплой на сервер/клиент)
+## Build JAR (deploy to server/client)
 
 ```bash
 cd Tungsten
-./gradlew build
+./gradlew build             # Linux/Mac
+gradlew.bat build           # Windows
 ```
 
-Результат: `build/libs/tungsten-fabric-ALPHA-1.6.0-1.21compat.jar`
+Output: `build/libs/tungsten-fabric-ALPHA-1.6.0-1.21compat.jar`
 
-Кладётся в `.minecraft/mods/` как обычный Fabric мод.
-Baritone и nether-pathfinder уже **bundled** внутри JAR (через `include` в build.gradle).
+Drop it into `.minecraft/mods/` as a regular Fabric mod.
+Baritone and nether-pathfinder are already **bundled** inside the JAR (via `include` in build.gradle).
 
 ---
 
-## Конфиг мода
+## Mod config
 
-Создаётся при первом запуске: `.minecraft/config/tungsten.json`
+Created on first launch: `.minecraft/config/tungsten.json`
 
 ```json
 {
@@ -144,35 +149,40 @@ Baritone и nether-pathfinder уже **bundled** внутри JAR (через `i
 }
 ```
 
-Менять через команды в чате (автосохранение):
+Change via in-game chat commands (auto-saves):
+
 ```
-;settings baritone true/false       — параллельный Baritone fallback
-;settings verboseDebug true/false   — verbose логи в консоль
-;settings driftCorrection true/false
-;settings driftThreshold 0.5
+;settings baritone [true/false]        — parallel Baritone fallback
+;settings verboseDebug [true/false]    — verbose console logging
+;settings driftCorrection [true/false]
+;settings driftThreshold [0.5]
 ```
+
+Without an argument — shows the current value.
 
 ---
 
-## Команды мода
+## Mod commands
 
-| Команда | Описание |
+| Command | Description |
 |---|---|
-| `;followPlayer <name>` | Следовать за игроком (push mode) |
-| `;followPlayer <name> <radius>` | Следовать, держась на radius блоков |
-| `;stop` | Остановить всё |
-| `;goto <x> <y> <z>` | Идти к координатам |
+| `;followPlayer <name>` | Follow a player (push mode) |
+| `;followPlayer <name> <radius>` | Follow at a given radius distance |
+| `;stop` | Stop everything |
+| `;goto <x> <y> <z>` | Go to coordinates |
 
 ---
 
-## Архитектура pathfinding
+## Pathfinding architecture
 
 ```
-dist < 6 + LOS  →  SUPER_FAST: прямой спринт + WindMouse поворот (~60 FPS)
-dist ≥ 6        →  Tungsten A* (всегда, первичный)
-                   + Baritone GoalFollowEntity (fallback, пока Tungsten ищет)
+dist < 6 + LOS  ->  SUPER_FAST: direct sprint + WindMouse rotation (~60 FPS)
+dist >= 6       ->  Tungsten A* (always, primary)
+                    + Baritone GoalFollowEntity (fallback while Tungsten is searching)
+dist > 20       ->  TRAILING: navigate along the target's movement trail (waypoints)
 ```
 
-- Tungsten находит путь → executor стартует → Baritone немедленно останавливается
-- После завершения executor'а Baritone не стартует ещё 3 сек (cooldown = 60 тиков)
-- `baritoneEnabled=false` → только Tungsten A*, без fallback
+- Tungsten finds a path -> executor starts -> Baritone stops immediately
+- After executor finishes, Baritone waits 3 sec (cooldown = 60 ticks) before starting
+- TRAILING: target "escaped" (dist>20 / height diff>5 / no progress for 5 sec) -> follow their trail
+- `baritoneEnabled=false` -> Tungsten A* only, no fallback
