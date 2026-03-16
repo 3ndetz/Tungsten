@@ -34,11 +34,6 @@ public class TungstenConfig {
      *  Keep false in normal use to reduce noise. */
     public boolean verboseDebugLogging = false;
 
-    /** If true: use Baritone as parallel fallback in follow tasks (dist >= 6 blocks).
-     *  If false: Tungsten A* only, no Baritone fallback.
-     *  Default: false — when embedded in altoclef, Baritone is managed by altoclef itself. */
-    public boolean baritoneEnabled = false;
-
     // ----------------------------------------
 
     public static TungstenConfig get() {

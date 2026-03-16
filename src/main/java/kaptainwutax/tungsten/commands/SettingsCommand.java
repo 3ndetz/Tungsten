@@ -52,19 +52,6 @@ public class SettingsCommand extends Command {
 				return SINGLE_SUCCESS;
 			})));
 
-		// ;settings baritone [true/false]
-		builder.then(literal("baritone")
-			.executes(context -> {
-				Debug.logMessage("baritoneEnabled = " + TungstenConfig.get().baritoneEnabled);
-				return SINGLE_SUCCESS;
-			})
-			.then(argument("enabled", BoolArgumentType.bool()).executes(context -> {
-				TungstenConfig.get().baritoneEnabled = BoolArgumentType.getBool(context, "enabled");
-				TungstenConfig.save();
-				Debug.logMessage("baritoneEnabled = " + TungstenConfig.get().baritoneEnabled);
-				return SINGLE_SUCCESS;
-			})));
-
 		// ;settings verboseDebug [true/false]
 		builder.then(literal("verboseDebug")
 			.executes(context -> {

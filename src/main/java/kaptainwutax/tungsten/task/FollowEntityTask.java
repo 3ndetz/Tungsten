@@ -1,10 +1,8 @@
 package kaptainwutax.tungsten.task;
 
 import kaptainwutax.tungsten.Debug;
-import kaptainwutax.tungsten.TungstenConfig;
 import kaptainwutax.tungsten.TungstenMod;
 import kaptainwutax.tungsten.TungstenModDataContainer;
-import kaptainwutax.tungsten.path.BaritoneDelegate;
 import kaptainwutax.tungsten.util.WindMouseRotation;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -18,7 +16,7 @@ import net.minecraft.world.WorldView;
 
 /**
  * Core entity-following engine. Contains ALL routing logic:
- * LEAP (PvP close-range), Tungsten A*, Baritone fallback, TRAILING.
+ * LEAP (PvP close-range), Tungsten A*, TRAILING.
  *
  * Two usage modes:
  *   1. Direct:  start(entity, closeEnough) — auto-stops when entity is removed
@@ -32,7 +30,6 @@ public class FollowEntityTask {
     private static final int    RECALC_TICKS       = 15;
     private static final double MIN_MOVE_DIST      = 1.5;
     private static final int    STUCK_TICKS        = 30;
-    private static final int    SWITCH_COOLDOWN_TICKS = 60; // 3 sec
 
     // ── state ───────────────────────────────────────────────────────────────────
     private static Entity  targetEntity    = null;
@@ -44,15 +41,11 @@ public class FollowEntityTask {
     // ── LEAP mode (PvP close-range: sprint+jump, no camera — altoclef handles aim) ─
     private static boolean leapActive = false;
 
-    // ── Baritone ────────────────────────────────────────────────────────────────
-    private static Entity baritoneLastEntity = null;
-
     // ── pathfinder state ────────────────────────────────────────────────────────
     private static Vec3d   lastTargetPos  = null;
     private static int     tickCounter    = 0;
     private static int     stuckTicks     = 0;
     private static boolean stopRequested  = false;
-    private static int     switchCooldown = 0;
 
     // ── TRAILING ────────────────────────────────────────────────────────────────
     private static final TrailTracker trail = new TrailTracker("FollowEntity");
@@ -85,12 +78,10 @@ public class FollowEntityTask {
     private static void resetState() {
         targetEntity       = null;
         lastKnownPos       = null;
-        baritoneLastEntity = null;
         lastTargetPos      = null;
         tickCounter        = 0;
         stuckTicks         = 0;
         stopRequested      = false;
-        switchCooldown     = 0;
         leapActive         = false;
         trail.reset();
     }
@@ -101,13 +92,10 @@ public class FollowEntityTask {
         targetEntity       = null;
         lastKnownPos       = null;
         leapActive         = false;
-        baritoneLastEntity = null;
         stopRequested      = false;
         stuckTicks         = 0;
-        switchCooldown     = 0;
         trail.reset();
         releaseKeys();
-        BaritoneDelegate.stop();
         TungstenModDataContainer.PATHFINDER.stop.set(true);
         TungstenModDataContainer.EXECUTOR.stop = true;
         Debug.logMessage("Follow stopped.");
@@ -117,7 +105,6 @@ public class FollowEntityTask {
     public static void updateTarget(Entity entity) {
         if (entity != targetEntity) {
             targetEntity = entity;
-            baritoneLastEntity = null; // force Baritone restart with new entity
         }
     }
 
@@ -175,7 +162,6 @@ public class FollowEntityTask {
 
         // ── Within closeEnough: hold position ─────────────────────────────────
         if (closeEnough > 0 && !outsideRadius && hasEntity) {
-            if (BaritoneDelegate.isPathing()) BaritoneDelegate.stop();
             return;
         }
 
@@ -217,50 +203,6 @@ public class FollowEntityTask {
             stuckTicks = 0;
         }
 
-        // ── Baritone: parallel fallback — runs when Tungsten executor is idle ─
-        if (TungstenConfig.get().baritoneEnabled) {
-            if (executorRunning) {
-                switchCooldown = SWITCH_COOLDOWN_TICKS;
-                if (baritoneLastEntity != null || BaritoneDelegate.isActive()) {
-                    BaritoneDelegate.stop();
-                    baritoneLastEntity = null;
-                    TungstenMod.LOG.info("[FollowEntity] Baritone yields to Tungsten");
-                }
-            } else {
-                if (baritoneLastEntity != null && baritoneLastEntity.isRemoved()) {
-                    BaritoneDelegate.stop();
-                    baritoneLastEntity = null;
-                }
-                if (switchCooldown > 0) {
-                    switchCooldown--;
-                } else if (trail.isTrailing()) {
-                    // TRAILING: Baritone navigates to waypoint
-                    if (!BaritoneDelegate.isPathing() && !BaritoneDelegate.isActive()) {
-                        baritoneLastEntity = null;
-                        BaritoneDelegate.goToBlock(effectiveTarget, (int) Math.max(closeEnough, 1));
-                        TungstenMod.LOG.info("[FollowEntity] Baritone TRAILING → waypoint "
-                                + trail.getWaypointIndex() + "/" + trail.getTrailSize());
-                    }
-                } else if (hasEntity) {
-                    if (targetEntity != baritoneLastEntity) {
-                        baritoneLastEntity = targetEntity;
-                        BaritoneDelegate.followEntity(targetEntity, closeEnough);
-                        TungstenMod.LOG.info("[FollowEntity] Baritone fallback (entity)");
-                    } else if (!BaritoneDelegate.isPathing() && !BaritoneDelegate.isActive()) {
-                        BaritoneDelegate.followEntity(targetEntity, closeEnough);
-                    }
-                } else if (lastKnownPos != null) {
-                    if (!BaritoneDelegate.isPathing() && !BaritoneDelegate.isActive()) {
-                        baritoneLastEntity = null;
-                        BaritoneDelegate.goToBlock(lastKnownPos, (int) Math.max(closeEnough, 1));
-                        TungstenMod.LOG.info("[FollowEntity] Baritone fallback (lastKnownPos)");
-                    }
-                }
-            }
-        } else if (BaritoneDelegate.isActive()) {
-            BaritoneDelegate.stop();
-            baritoneLastEntity = null;
-        }
     }
 
     private static void startFind(WorldView world, ClientPlayerEntity player, Vec3d target, double dist) {

@@ -26,7 +26,7 @@ public class StopCommand extends Command {
 						|| TungstenModDataContainer.PATHFINDER.active.get()
 						|| TungstenModDataContainer.EXECUTOR.isRunning();
 
-				// Stop follow tasks (cascades to pathfinder + executor + Baritone)
+				// Stop follow tasks (cascades to pathfinder + executor)
 				if (FollowPlayerTask.isActive()) {
 					FollowPlayerTask.stop();
 				} else if (FollowEntityTask.isActive()) {
