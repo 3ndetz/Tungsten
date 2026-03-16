@@ -23,14 +23,6 @@ repositories {
     flatDir {
         dirs './libs'
     }
-    maven {
-        name = 'BaritoneLocalMaven'
-        url = file('../baritone_altoclef/maven')
-    }
-    maven {
-        name = 'babbaj-repo'
-        url = 'https://babbaj.github.io/maven/'
-    }
 }
 
 dependencies {
@@ -47,13 +39,8 @@ dependencies {
 
 	// modImplementation "net.fabricmc.fabric-api:fabric-api-deprecated:${project.fapi_version}"
 
-	// Baritone — bundled, same approach as altoclef
-	modImplementation "cabaletta:baritone-unoptimized-fabric:1.21"
-	include "cabaletta:baritone-unoptimized-fabric:1.21"
-
-	// Nether pathfinder — required by Baritone's ElytraProcess at classload time
-	implementation 'dev.babbaj:nether-pathfinder:1.5'
-	include 'dev.babbaj:nether-pathfinder:1.5'
+	// Baritone — will be provided as project dependency in unionclef
+	// nether-pathfinder — will come transitively from baritone
 }
 
 processResources {
